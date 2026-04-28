@@ -11,8 +11,8 @@ class SurfaceType(str, Enum):
 
 class StabilityState(str, Enum):
     STABLE = "Stable"
-    TRANSITION = "Transition / Potentially unstable"
-    CAVED = "Caved / Major failure"
+    UNSTABLE = "Unstable"
+    CAVED = "Caved"
     UNKNOWN = "Unknown"
 
 
@@ -45,7 +45,6 @@ class JointSet:
 class SurfaceInput:
     surface_type: SurfaceType
     dip_deg: float
-    dip_direction_deg: float
     q_prime: float
 
 
@@ -53,17 +52,21 @@ class SurfaceInput:
 class SurfaceResult:
     surface_type: SurfaceType
     dip_deg: float
-    dip_direction_deg: float
-
     q_prime: float
+
     stress_factor_a: float
     joint_factor_b: float
     surface_factor_c: float
-
     stability_number_n: float
-    actual_hydraulic_radius_m: float
-    stable_hydraulic_radius_limit_m: float
-    caving_hydraulic_radius_limit_m: float
+
+    hr_stable: float
+    hr_caving: float
+    equivalent_stable_span: float
+    equivalent_caving_span: float
+
+    stable_strike_length_m: float
+    cave_strike_length_m: float
+    rating_length_m: float
 
     stability_state: StabilityState
 
