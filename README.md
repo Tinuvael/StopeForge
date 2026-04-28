@@ -152,20 +152,20 @@ Installation
 
 
 Clone the repository:
-git clone https://github.com/YOUR_USERNAME/stopeforge.git
+
+```bash
+git clone https://github.com/Tinuvael/stopeforge.git
 cd stopeforge
+```
 Create a virtual environment:
 python -m venv .venv
-Activate it:
-
-Windows:
+Activate the virtual environment:
 .venv\Scripts\activate
-Linux / macOS:
-source .venv/bin/activate
 Install dependencies:
 pip install -r requirements.txt
 Run the application:
 python run.py
+
 
 Status
 
