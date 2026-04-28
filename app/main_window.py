@@ -1,14 +1,17 @@
 import tkinter as tk
 from tkinter import ttk
 
+from gui.calculation_tab import CalculationTab
+from gui.placeholder_tab import PlaceholderTab
+
 
 class StopeForgeApp(tk.Tk):
     def __init__(self):
         super().__init__()
 
         self.title("StopeForge")
-        self.geometry("1200x800")
-        self.minsize(1000, 700)
+        self.geometry("1300x850")
+        self.minsize(1100, 750)
 
         self._build_ui()
 
@@ -16,38 +19,53 @@ class StopeForgeApp(tk.Tk):
         notebook = ttk.Notebook(self)
         notebook.pack(fill="both", expand=True)
 
-        calculation_frame = ttk.Frame(notebook)
-        cases_frame = ttk.Frame(notebook)
-        graph_frame = ttk.Frame(notebook)
-        calibration_frame = ttk.Frame(notebook)
+        self.calculation_tab = CalculationTab(notebook)
 
-        notebook.add(calculation_frame, text="Calculation")
-        notebook.add(cases_frame, text="Case Histories")
-        notebook.add(graph_frame, text="Stability Graph")
-        notebook.add(calibration_frame, text="Calibration")
+        self.project_overview_tab = PlaceholderTab(
+            notebook,
+            title="Project Overview",
+            message=(
+                "Project overview table will be implemented in v0.2.\n\n"
+                "Planned fields:\n"
+                "Project | Domain | Stope ID | Depth | Height | Avg Dip | Width | Span | "
+                "Limiting Surface | Final State | Comment"
+            ),
+        )
 
-        ttk.Label(
-            calculation_frame,
-            text="Mathews–Potvin calculation module will be implemented here."
-        ).pack(padx=20, pady=20, anchor="w")
+        self.case_histories_tab = PlaceholderTab(
+            notebook,
+            title="Case Histories",
+            message=(
+                "Case history database will be implemented in a later version.\n\n"
+                "This tab will store observed stope performance."
+            ),
+        )
 
-        ttk.Label(
-            cases_frame,
-            text="Site-specific stope case history database will be implemented here."
-        ).pack(padx=20, pady=20, anchor="w")
+        self.graph_tab = PlaceholderTab(
+            notebook,
+            title="Stability Graph",
+            message=(
+                "Stability graph will be implemented in a later version.\n\n"
+                "Planned graph: Mathews stability number N vs Hydraulic Radius HR."
+            ),
+        )
 
-        ttk.Label(
-            graph_frame,
-            text="N–HR stability graph will be implemented here."
-        ).pack(padx=20, pady=20, anchor="w")
+        self.export_tab = PlaceholderTab(
+            notebook,
+            title="Export",
+            message=(
+                "Export tools will be implemented in a later version.\n\n"
+                "Planned exports: current calculation table, project overview, case histories, graph."
+            ),
+        )
 
-        ttk.Label(
-            calibration_frame,
-            text="Site-specific calibration tools will be implemented here."
-        ).pack(padx=20, pady=20, anchor="w")
+        notebook.add(self.calculation_tab, text="Calculation")
+        notebook.add(self.project_overview_tab, text="Project Overview")
+        notebook.add(self.case_histories_tab, text="Case Histories")
+        notebook.add(self.graph_tab, text="Stability Graph")
+        notebook.add(self.export_tab, text="Export")
 
 
 def main():
     app = StopeForgeApp()
     app.mainloop()
-
