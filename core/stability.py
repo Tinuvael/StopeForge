@@ -1,4 +1,5 @@
-from core.geometry import calculate_surface_hydraulic_radius
+import math
+
 from core.mathews_factors import (
     calculate_joint_orientation_factor_b,
     calculate_stress_factor_a,
@@ -34,11 +35,6 @@ def calculate_stability_number(
 
 
 def calculate_stable_hr_limit(stability_number_n: float) -> float:
-    """
-    Stable hydraulic radius limit.
-
-    Transferred from the previous FjordUG prototype.
-    """
     n = stability_number_n
 
     if n < 0.5:
@@ -78,11 +74,6 @@ def calculate_stable_hr_limit(stability_number_n: float) -> float:
 
 
 def calculate_caving_hr_limit(stability_number_n: float) -> float:
-    """
-    Caving / major failure hydraulic radius limit.
-
-    Transferred from the previous FjordUG prototype.
-    """
     n = stability_number_n
 
     if n < 0.5:
@@ -125,28 +116,69 @@ def calculate_caving_hr_limit(stability_number_n: float) -> float:
     return 16 + 0.0286 * n
 
 
-def classify_surface_stability(
-    actual_hr: float,
-    stable_hr_limit: float,
-    caving_hr_limit: float,
+def _safe_sin_deg(angle_deg: float) -> float:
+    value = math.sin(math.radians(angle_deg))
+    if abs(value) < 1e-9:
+        raise ValueError("Sin(angle) is too close to zero. Check surface angle.")
+    return value
+
+
+def _safe_cos_deg(angle_deg: float) -> float:
+    value = math.cos(math.radians(angle_deg))
+    if abs(value) < 1e-9:
+        raise ValueError("Cos(angle) is too close to zero. Check crown angle.")
+    return value
+
+
+def calculate_stable_strike_length(
+    surface_type: SurfaceType,
+    surface_angle_deg: float,
+    crown_angle_deg: float,
+    stope_height_m: float,
+    stope_width_m: float,
+    equivalent_span_m: float,
+) -> float:
+    """
+    Logic copied from the old FjordUG prototype.
+
+    For walls:
+        adjusted = height / sin(surface_angle)
+
+    For crown and end wall:
+        adjusted = span / cos(crown_angle)
+
+    Here stope_width_m is used as the cross-section span from the old prototype.
+    """
+    if surface_type in (SurfaceType.HANGING_WALL, SurfaceType.FOOTWALL):
+        adjusted = stope_height_m / _safe_sin_deg(surface_angle_deg)
+    else:
+        adjusted = stope_width_m / _safe_cos_deg(crown_angle_deg)
+
+    if adjusted <= equivalent_span_m:
+        return float("inf")
+
+    return adjusted * equivalent_span_m / (adjusted - equivalent_span_m)
+
+
+def classify_by_length(
+    rating_length_m: float,
+    stable_length_m: float,
+    cave_length_m: float,
 ) -> StabilityState:
-    if actual_hr <= 0:
-        return StabilityState.UNKNOWN
+    if rating_length_m >= cave_length_m:
+        return StabilityState.CAVED
 
-    if actual_hr <= stable_hr_limit:
-        return StabilityState.STABLE
+    if stable_length_m < rating_length_m < cave_length_m:
+        return StabilityState.UNSTABLE
 
-    if actual_hr <= caving_hr_limit:
-        return StabilityState.TRANSITION
-
-    return StabilityState.CAVED
+    return StabilityState.STABLE
 
 
 def get_worst_state(states: list[StabilityState]) -> StabilityState:
     priority = {
         StabilityState.UNKNOWN: 0,
         StabilityState.STABLE: 1,
-        StabilityState.TRANSITION: 2,
+        StabilityState.UNSTABLE: 2,
         StabilityState.CAVED: 3,
     }
 
@@ -164,12 +196,40 @@ def calculate_stope_result(
         ucs_mpa=stope.ucs_mpa,
     )
 
+    surface_by_type = {surface.surface_type: surface for surface in surfaces}
+
+    required_surfaces = [
+        SurfaceType.CROWN,
+        SurfaceType.HANGING_WALL,
+        SurfaceType.FOOTWALL,
+        SurfaceType.END_WALL,
+    ]
+
+    for surface_type in required_surfaces:
+        if surface_type not in surface_by_type:
+            raise ValueError(f"Missing surface: {surface_type.value}")
+
+    crown_angle = surface_by_type[SurfaceType.CROWN].dip_deg
+    hanging_wall_angle = surface_by_type[SurfaceType.HANGING_WALL].dip_deg
+    end_wall_angle = surface_by_type[SurfaceType.END_WALL].dip_deg
+
+    endwall_dip_direction = (stope.hanging_wall_dip_direction_deg - 90) % 360
+
+    surface_dip_directions = {
+        SurfaceType.CROWN: stope.hanging_wall_dip_direction_deg,
+        SurfaceType.HANGING_WALL: stope.hanging_wall_dip_direction_deg,
+        SurfaceType.FOOTWALL: stope.hanging_wall_dip_direction_deg,
+        SurfaceType.END_WALL: endwall_dip_direction,
+    }
+
     surface_results: list[SurfaceResult] = []
 
     for surface in surfaces:
+        surface_dip_direction = surface_dip_directions[surface.surface_type]
+
         joint_factor_b = calculate_joint_orientation_factor_b(
             surface_dip_deg=surface.dip_deg,
-            surface_dip_direction_deg=surface.dip_direction_deg,
+            surface_dip_direction_deg=surface_dip_direction,
             joint_sets=joint_sets,
         )
 
@@ -182,51 +242,79 @@ def calculate_stope_result(
             surface_factor_c=surface_factor_c,
         )
 
-        actual_hr = calculate_surface_hydraulic_radius(
+        hr_stable = calculate_stable_hr_limit(stability_number_n)
+        hr_caving = calculate_caving_hr_limit(stability_number_n)
+
+        equivalent_stable_span = hr_stable * 2
+        equivalent_caving_span = hr_caving * 2
+
+        stable_strike_length = calculate_stable_strike_length(
             surface_type=surface.surface_type,
+            surface_angle_deg=surface.dip_deg,
+            crown_angle_deg=crown_angle,
             stope_height_m=stope.stope_height_m,
             stope_width_m=stope.stope_width_m,
-            stope_span_m=stope.stope_span_m,
+            equivalent_span_m=equivalent_stable_span,
         )
 
-        stable_hr_limit = calculate_stable_hr_limit(stability_number_n)
-        caving_hr_limit = calculate_caving_hr_limit(stability_number_n)
+        cave_strike_length = calculate_stable_strike_length(
+            surface_type=surface.surface_type,
+            surface_angle_deg=surface.dip_deg,
+            crown_angle_deg=crown_angle,
+            stope_height_m=stope.stope_height_m,
+            stope_width_m=stope.stope_width_m,
+            equivalent_span_m=equivalent_caving_span,
+        )
 
-        state = classify_surface_stability(
-            actual_hr=actual_hr,
-            stable_hr_limit=stable_hr_limit,
-            caving_hr_limit=caving_hr_limit,
+        effective_length_endwall = (
+            stope.stope_height_m / _safe_sin_deg(hanging_wall_angle)
+        ) / _safe_sin_deg(end_wall_angle)
+
+        if surface.surface_type == SurfaceType.END_WALL:
+            rating_length = effective_length_endwall
+        else:
+            rating_length = stope.stope_span_m
+
+        state = classify_by_length(
+            rating_length_m=rating_length,
+            stable_length_m=stable_strike_length,
+            cave_length_m=cave_strike_length,
         )
 
         surface_results.append(
             SurfaceResult(
                 surface_type=surface.surface_type,
                 dip_deg=surface.dip_deg,
-                dip_direction_deg=surface.dip_direction_deg,
                 q_prime=surface.q_prime,
                 stress_factor_a=stress_factor_a,
                 joint_factor_b=joint_factor_b,
                 surface_factor_c=surface_factor_c,
                 stability_number_n=stability_number_n,
-                actual_hydraulic_radius_m=actual_hr,
-                stable_hydraulic_radius_limit_m=stable_hr_limit,
-                caving_hydraulic_radius_limit_m=caving_hr_limit,
+                hr_stable=hr_stable,
+                hr_caving=hr_caving,
+                equivalent_stable_span=equivalent_stable_span,
+                equivalent_caving_span=equivalent_caving_span,
+                stable_strike_length_m=stable_strike_length,
+                cave_strike_length_m=cave_strike_length,
+                rating_length_m=rating_length,
                 stability_state=state,
             )
         )
 
     final_state = get_worst_state([result.stability_state for result in surface_results])
 
+    priority = {
+        StabilityState.UNKNOWN: 0,
+        StabilityState.STABLE: 1,
+        StabilityState.UNSTABLE: 2,
+        StabilityState.CAVED: 3,
+    }
+
     limiting_surface_result = max(
         surface_results,
         key=lambda result: (
-            {
-                StabilityState.UNKNOWN: 0,
-                StabilityState.STABLE: 1,
-                StabilityState.TRANSITION: 2,
-                StabilityState.CAVED: 3,
-            }[result.stability_state],
-            result.actual_hydraulic_radius_m / max(result.stable_hydraulic_radius_limit_m, 0.0001),
+            priority[result.stability_state],
+            result.rating_length_m / max(result.stable_strike_length_m, 0.0001),
         ),
     )
 
