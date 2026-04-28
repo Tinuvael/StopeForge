@@ -175,15 +175,9 @@ This project is in early development.
 The first goal is to build a clean and reliable Mathews–Potvin calculator with a simple graphical interface. Advanced calibration and statistical tools will be added after the basic calculation workflow is stable.
 
 
-Disclaimer
 
+## License and disclaimer
 
-StopeForge is intended for preliminary engineering assessment and research support only.
+This project is licensed under the GNU General Public License.
 
-The Mathews–Potvin stability graph method is empirical and should not be used as the sole basis for final stope design. Engineering judgement, site-specific observations, numerical modelling, stress analysis, geological interpretation, and operational experience should always be considered.
-
-
-License
-
-
-To be defined.
+This software is an auxiliary engineering calculation tool. See [DISCLAIMER.md](./DISCLAIMER.md) before using any results for engineering decisions.
