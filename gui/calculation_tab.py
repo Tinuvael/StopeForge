@@ -1,3 +1,4 @@
+import math
 import tkinter as tk
 from tkinter import ttk, messagebox
 
@@ -11,8 +12,10 @@ from core.stability import calculate_stope_result
 
 
 class CalculationTab(ttk.Frame):
-    def __init__(self, parent):
+    def __init__(self, parent, on_save_result=None):
         super().__init__(parent)
+
+        self.on_save_result = on_save_result
 
         self.entries: dict[str, tk.StringVar] = {}
         self.surface_entries: dict[SurfaceType, dict[str, tk.StringVar]] = {}
@@ -72,6 +75,8 @@ class CalculationTab(ttk.Frame):
         self._add_entry(frame, 0, "Project name", "project_name", "Demo project")
         self._add_entry(frame, 1, "Domain", "domain_name", "Domain 1")
         self._add_entry(frame, 2, "Stope ID", "stope_id", "Stope 001")
+        self._add_entry(frame, 3, "Comment", "comment", "")
+
 
     def _build_stress_frame(self):
         frame = ttk.LabelFrame(self.scrollable_frame, text="Rock mass and stress parameters")
@@ -84,7 +89,7 @@ class CalculationTab(ttk.Frame):
 
         ttk.Label(
             frame,
-            text="Note: K / λ is stored for the project. In v0.1, A uses simplified UCS / vertical stress logic from the previous prototype.",
+            text="K / λ is stored for the project. Current A calculation follows the old prototype logic.",
             foreground="#555555",
         ).grid(row=4, column=0, columnspan=2, sticky="w", padx=6, pady=(8, 4))
 
@@ -152,7 +157,7 @@ class CalculationTab(ttk.Frame):
         frame = ttk.LabelFrame(self.scrollable_frame, text="Surface parameters")
         frame.grid(row=4, column=0, sticky="ew", padx=10, pady=8)
 
-        headers = ["Surface", "Dip, °", "Dip direction, °", "Q'"]
+        headers = ["Surface", "Dip, °", "Q'"]
         for col, header in enumerate(headers):
             ttk.Label(frame, text=header, font=("Segoe UI", 9, "bold")).grid(
                 row=0,
@@ -163,13 +168,13 @@ class CalculationTab(ttk.Frame):
             )
 
         default_surfaces = [
-            (SurfaceType.CROWN, "0", "90", "20"),
-            (SurfaceType.HANGING_WALL, "75", "90", "20"),
-            (SurfaceType.FOOTWALL, "75", "270", "20"),
-            (SurfaceType.END_WALL, "90", "0", "20"),
+            (SurfaceType.CROWN, "0", "20"),
+            (SurfaceType.HANGING_WALL, "75", "20"),
+            (SurfaceType.FOOTWALL, "75", "20"),
+            (SurfaceType.END_WALL, "90", "20"),
         ]
 
-        for row, (surface_type, dip, dip_dir, q_prime) in enumerate(default_surfaces, start=1):
+        for row, (surface_type, dip, q_prime) in enumerate(default_surfaces, start=1):
             ttk.Label(frame, text=surface_type.value).grid(
                 row=row,
                 column=0,
@@ -179,7 +184,6 @@ class CalculationTab(ttk.Frame):
             )
 
             dip_var = tk.StringVar(value=dip)
-            dip_dir_var = tk.StringVar(value=dip_dir)
             q_prime_var = tk.StringVar(value=q_prime)
 
             ttk.Entry(frame, textvariable=dip_var, width=16).grid(
@@ -189,16 +193,9 @@ class CalculationTab(ttk.Frame):
                 pady=3,
                 sticky="w",
             )
-            ttk.Entry(frame, textvariable=dip_dir_var, width=16).grid(
-                row=row,
-                column=2,
-                padx=6,
-                pady=3,
-                sticky="w",
-            )
             ttk.Entry(frame, textvariable=q_prime_var, width=16).grid(
                 row=row,
-                column=3,
+                column=2,
                 padx=6,
                 pady=3,
                 sticky="w",
@@ -206,18 +203,17 @@ class CalculationTab(ttk.Frame):
 
             self.surface_entries[surface_type] = {
                 "dip": dip_var,
-                "dip_direction": dip_dir_var,
                 "q_prime": q_prime_var,
             }
 
         ttk.Label(
             frame,
             text=(
-                "Q' is entered manually for each stope surface. "
-                "A, B, C, N and HR are calculated automatically."
+                "Surface dip direction is not entered here. It is derived from hanging wall dip direction, "
+                "as in the old prototype."
             ),
             foreground="#555555",
-        ).grid(row=5, column=0, columnspan=4, sticky="w", padx=6, pady=(8, 4))
+        ).grid(row=5, column=0, columnspan=3, sticky="w", padx=6, pady=(8, 4))
 
     def _build_buttons(self):
         frame = ttk.Frame(self.scrollable_frame)
@@ -229,12 +225,12 @@ class CalculationTab(ttk.Frame):
             command=self.calculate,
         ).pack(side="left", padx=(0, 8))
 
-        self.save_button = ttk.Button(
+        ttk.Button(
             frame,
-            text="Save to Project Overview (v0.2)",
-            command=self.save_to_project_overview_placeholder,
-        )
-        self.save_button.pack(side="left", padx=(0, 8))
+            text="Save to Project Overview",
+            command=self.save_to_project_overview,
+        ).pack(side="left", padx=(0, 8))
+
 
     def _build_results_frame(self):
         frame = ttk.LabelFrame(self.scrollable_frame, text="Calculation results")
@@ -248,9 +244,11 @@ class CalculationTab(ttk.Frame):
             "b",
             "c",
             "n",
-            "actual_hr",
-            "stable_hr",
-            "caving_hr",
+            "hr",
+            "hro",
+            "stable_span",
+            "cave_span",
+            "rating_length",
             "state",
         )
 
@@ -264,9 +262,11 @@ class CalculationTab(ttk.Frame):
             "b": "B",
             "c": "C",
             "n": "N",
-            "actual_hr": "Actual HR",
-            "stable_hr": "Stable HR limit",
-            "caving_hr": "Caving HR limit",
+            "hr": "HR stable",
+            "hro": "HR cave",
+            "stable_span": "Stable span",
+            "cave_span": "Cave span",
+            "rating_length": "Rating length",
             "state": "State",
         }
 
@@ -278,10 +278,12 @@ class CalculationTab(ttk.Frame):
             "b": 70,
             "c": 70,
             "n": 80,
-            "actual_hr": 90,
-            "stable_hr": 120,
-            "caving_hr": 120,
-            "state": 180,
+            "hr": 90,
+            "hro": 90,
+            "stable_span": 110,
+            "cave_span": 110,
+            "rating_length": 110,
+            "state": 100,
         }
 
         for column in columns:
@@ -316,6 +318,13 @@ class CalculationTab(ttk.Frame):
             return None
 
         return float(raw_value)
+
+    @staticmethod
+    def _format_length(value: float) -> str:
+        if value == float("inf") or math.isinf(value):
+            return "not limited"
+
+        return f"{value:.2f}"
 
     def _collect_stope_input(self) -> StopeInput:
         return StopeInput(
@@ -367,20 +376,15 @@ class CalculationTab(ttk.Frame):
 
         for surface_type, fields in self.surface_entries.items():
             dip = self._parse_optional_float(fields["dip"].get())
-            dip_direction = self._parse_optional_float(fields["dip_direction"].get())
             q_prime = self._parse_optional_float(fields["q_prime"].get())
 
             if dip is None:
                 raise ValueError(f"{surface_type.value}: dip is empty.")
-            if dip_direction is None:
-                raise ValueError(f"{surface_type.value}: dip direction is empty.")
             if q_prime is None:
                 raise ValueError(f"{surface_type.value}: Q' is empty.")
 
             if not 0 <= dip <= 90:
                 raise ValueError(f"{surface_type.value}: dip must be between 0 and 90 degrees.")
-            if not 0 <= dip_direction <= 360:
-                raise ValueError(f"{surface_type.value}: dip direction must be between 0 and 360 degrees.")
             if q_prime <= 0:
                 raise ValueError(f"{surface_type.value}: Q' must be greater than zero.")
 
@@ -388,7 +392,6 @@ class CalculationTab(ttk.Frame):
                 SurfaceInput(
                     surface_type=surface_type,
                     dip_deg=dip,
-                    dip_direction_deg=dip_direction,
                     q_prime=q_prime,
                 )
             )
@@ -429,9 +432,11 @@ class CalculationTab(ttk.Frame):
                     f"{surface.joint_factor_b:.3f}",
                     f"{surface.surface_factor_c:.3f}",
                     f"{surface.stability_number_n:.2f}",
-                    f"{surface.actual_hydraulic_radius_m:.2f}",
-                    f"{surface.stable_hydraulic_radius_limit_m:.2f}",
-                    f"{surface.caving_hydraulic_radius_limit_m:.2f}",
+                    f"{surface.hr_stable:.2f}",
+                    f"{surface.hr_caving:.2f}",
+                    self._format_length(surface.stable_strike_length_m),
+                    self._format_length(surface.cave_strike_length_m),
+                    f"{surface.rating_length_m:.2f}",
                     surface.stability_state.value,
                 ),
             )
@@ -441,16 +446,26 @@ class CalculationTab(ttk.Frame):
             f"Limiting surface: {result.limiting_surface.value}"
         )
 
-    def save_to_project_overview_placeholder(self):
+    def save_to_project_overview(self):
         if self.last_result is None:
             messagebox.showinfo(
                 "No calculation",
-                "Run calculation first. Saving to Project Overview will be implemented in v0.2.",
+                "Run calculation first.",
             )
             return
 
-        messagebox.showinfo(
-            "v0.2 feature",
-            "Saving calculation results to Project Overview will be implemented in v0.2.",
-        )
+        if self.on_save_result is None:
+            messagebox.showerror(
+                "Save error",
+                "Project Overview tab is not connected.",
+            )
+            return
 
+        comment = self._get_string("comment")
+
+        self.on_save_result(self.last_result, comment)
+
+        messagebox.showinfo(
+            "Saved",
+            "Calculation result was saved to Project Overview.",
+        )
