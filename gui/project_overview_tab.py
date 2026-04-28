@@ -1,6 +1,7 @@
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, filedialog
 
+from core.export_excel import export_project_overview_to_excel
 from core.models import StopeResult
 
 
@@ -30,6 +31,13 @@ class ProjectOverviewTab(ttk.Frame):
             text="Clear table",
             command=self.clear_table,
         ).pack(side="right")
+
+        ttk.Button(
+            title_frame,
+            text="Export to Excel",
+            command=self.export_to_excel,
+        ).pack(side="right", padx=(0, 8))
+
 
         columns = (
             "project",
@@ -155,3 +163,36 @@ class ProjectOverviewTab(ttk.Frame):
             self.tree.delete(item)
 
         self.summary_var.set("No saved calculations yet.")
+
+    def export_to_excel(self):
+        if not self.rows:
+            messagebox.showinfo(
+                "No data",
+                "Project Overview is empty.",
+            )
+            return
+        
+        output_path = filedialog.asksaveasfilename(
+            title="Export Project Overview",
+            defaultextension=".xlsx",
+            filetypes=[("Excel workbook", "*.xlsx")],
+            initialfile="project_overview.xlsx",
+        )
+
+        if not output_path:
+            return
+
+        try:
+            export_project_overview_to_excel(
+                rows=self.rows,
+                output_path=output_path,
+            )
+
+            messagebox.showinfo(
+                "Export complete",
+                f"Project Overview was exported to:\n{output_path}",
+            )
+
+        except Exception as error:
+            messagebox.showerror("Export error", str(error))
+
