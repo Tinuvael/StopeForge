@@ -1,6 +1,8 @@
 import math
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, filedialog
+from core.export_excel import export_current_calculation_to_excel
+
 
 from core.models import (
     JointSet,
@@ -21,6 +23,7 @@ class CalculationTab(ttk.Frame):
         self.surface_entries: dict[SurfaceType, dict[str, tk.StringVar]] = {}
         self.joint_entries: list[dict[str, tk.StringVar]] = []
         self.last_result = None
+        self.last_joint_sets = []
 
         self._build_ui()
 
@@ -231,6 +234,12 @@ class CalculationTab(ttk.Frame):
             command=self.save_to_project_overview,
         ).pack(side="left", padx=(0, 8))
 
+        ttk.Button(
+            frame,
+            text="Export current calculation to Excel",
+            command=self.export_current_calculation,
+        ).pack(side="left", padx=(0, 8))
+
 
     def _build_results_frame(self):
         frame = ttk.LabelFrame(self.scrollable_frame, text="Calculation results")
@@ -411,6 +420,7 @@ class CalculationTab(ttk.Frame):
             )
 
             self.last_result = result
+            self.last_joint_sets = joint_sets
             self._show_result(result)
 
         except Exception as error:
@@ -469,3 +479,36 @@ class CalculationTab(ttk.Frame):
             "Saved",
             "Calculation result was saved to Project Overview.",
         )
+    
+    def export_current_calculation(self):
+        if self.last_result is None:
+            messagebox.showinfo(
+                "No calculation",
+                "Run calculation first.",
+            )
+            return
+
+        output_path = filedialog.asksaveasfilename(
+            title="Export current calculation",
+            defaultextension=".xlsx",
+            filetypes=[("Excel workbook", "*.xlsx")],
+            initialfile=f"{self.last_result.stope.stope_id}_calculation.xlsx",
+        )
+
+        if not output_path:
+            return
+
+        try:
+            export_current_calculation_to_excel(
+                result=self.last_result,
+                joint_sets=self.last_joint_sets,
+                output_path=output_path,
+            )
+
+            messagebox.showinfo(
+                "Export complete",
+                f"Calculation was exported to:\n{output_path}",
+            )
+
+        except Exception as error:
+            messagebox.showerror("Export error", str(error))
