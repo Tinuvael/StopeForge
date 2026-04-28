@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import ttk
 
 from gui.calculation_tab import CalculationTab
+from gui.project_overview_tab import ProjectOverviewTab
 from gui.placeholder_tab import PlaceholderTab
 
 
@@ -19,17 +20,11 @@ class StopeForgeApp(tk.Tk):
         notebook = ttk.Notebook(self)
         notebook.pack(fill="both", expand=True)
 
-        self.calculation_tab = CalculationTab(notebook)
+        self.project_overview_tab = ProjectOverviewTab(notebook)
 
-        self.project_overview_tab = PlaceholderTab(
+        self.calculation_tab = CalculationTab(
             notebook,
-            title="Project Overview",
-            message=(
-                "Project overview table will be implemented in v0.2.\n\n"
-                "Planned fields:\n"
-                "Project | Domain | Stope ID | Depth | Height | Avg Dip | Width | Span | "
-                "Limiting Surface | Final State | Comment"
-            ),
+            on_save_result=self.project_overview_tab.add_result,
         )
 
         self.case_histories_tab = PlaceholderTab(
