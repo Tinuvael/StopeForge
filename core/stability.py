@@ -1,51 +1,455 @@
-from core.models import StabilityState
+import math
+import tkinter as tk
+from tkinter import ttk, messagebox
+
+from core.models import (
+    JointSet,
+    StopeInput,
+    SurfaceInput,
+    SurfaceType,
+)
+from core.stability import calculate_stope_result
 
 
-def calculate_stability_number(
-    q_prime: float,
-    stress_factor_a: float,
-    orientation_factor_b: float,
-    gravity_factor_c: float,
-) -> float:
-    """
-    Calculate Mathews stability number:
+class CalculationTab(ttk.Frame):
+    def __init__(self, parent):
+        super().__init__(parent)
 
-    N = Q' * A * B * C
-    """
-    values = {
-        "Q'": q_prime,
-        "A": stress_factor_a,
-        "B": orientation_factor_b,
-        "C": gravity_factor_c,
-    }
+        self.entries: dict[str, tk.StringVar] = {}
+        self.surface_entries: dict[SurfaceType, dict[str, tk.StringVar]] = {}
+        self.joint_entries: list[dict[str, tk.StringVar]] = []
+        self.last_result = None
 
-    for name, value in values.items():
-        if value <= 0:
-            raise ValueError(f"{name} must be greater than zero.")
+        self._build_ui()
 
-    return q_prime * stress_factor_a * orientation_factor_b * gravity_factor_c
+    def _build_ui(self):
+        main_container = ttk.Frame(self)
+        main_container.pack(fill="both", expand=True)
 
+        canvas = tk.Canvas(main_container)
+        scrollbar = ttk.Scrollbar(main_container, orient="vertical", command=canvas.yview)
 
-def classify_stability_placeholder(
-    hydraulic_radius_m: float,
-    stability_number_n: float,
-) -> StabilityState:
-    """
-    Temporary placeholder classification.
+        self.scrollable_frame = ttk.Frame(canvas)
+        self.scrollable_frame.bind(
+            "<Configure>",
+            lambda event: canvas.configure(scrollregion=canvas.bbox("all")),
+        )
 
-    Real Mathews–Potvin empirical boundaries will be implemented later.
-    """
-    if hydraulic_radius_m <= 0 or stability_number_n <= 0:
-        return StabilityState.UNKNOWN
+        canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
 
-    ratio = stability_number_n / hydraulic_radius_m
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
 
-    if ratio >= 10:
-        return StabilityState.STABLE
-    if ratio >= 3:
-        return StabilityState.MINOR_FAILURE
-    if ratio >= 1:
-        return StabilityState.MAJOR_FAILURE
+        self._build_project_frame()
+        self._build_stress_frame()
+        self._build_geometry_frame()
+        self._build_joint_sets_frame()
+        self._build_surface_frame()
+        self._build_buttons()
+        self._build_results_frame()
 
-    return StabilityState.CAVED
+    def _add_entry(
+        self,
+        parent: ttk.Frame,
+        row: int,
+        label: str,
+        key: str,
+        default: str = "",
+        width: int = 18,
+    ):
+        ttk.Label(parent, text=label).grid(row=row, column=0, sticky="w", padx=6, pady=4)
 
+        var = tk.StringVar(value=default)
+        entry = ttk.Entry(parent, textvariable=var, width=width)
+        entry.grid(row=row, column=1, sticky="w", padx=6, pady=4)
+
+        self.entries[key] = var
+
+    def _build_project_frame(self):
+        frame = ttk.LabelFrame(self.scrollable_frame, text="Project / Domain")
+        frame.grid(row=0, column=0, sticky="ew", padx=10, pady=8)
+
+        self._add_entry(frame, 0, "Project name", "project_name", "Demo project")
+        self._add_entry(frame, 1, "Domain", "domain_name", "Domain 1")
+        self._add_entry(frame, 2, "Stope ID", "stope_id", "Stope 001")
+
+    def _build_stress_frame(self):
+        frame = ttk.LabelFrame(self.scrollable_frame, text="Rock mass and stress parameters")
+        frame.grid(row=1, column=0, sticky="ew", padx=10, pady=8)
+
+        self._add_entry(frame, 0, "Mining depth, m", "depth_m", "500")
+        self._add_entry(frame, 1, "Unit weight, t/m³", "unit_weight_t_m3", "2.7")
+        self._add_entry(frame, 2, "UCS, MPa", "ucs_mpa", "100")
+        self._add_entry(frame, 3, "Horizontal stress ratio K / λ", "horizontal_stress_ratio", "1.0")
+
+        ttk.Label(
+            frame,
+            text="K / λ is stored for the project. Current A calculation follows the old prototype logic.",
+            foreground="#555555",
+        ).grid(row=4, column=0, columnspan=2, sticky="w", padx=6, pady=(8, 4))
+
+    def _build_geometry_frame(self):
+        frame = ttk.LabelFrame(self.scrollable_frame, text="Stope geometry")
+        frame.grid(row=2, column=0, sticky="ew", padx=10, pady=8)
+
+        self._add_entry(frame, 0, "Stope height, m", "stope_height_m", "40")
+        self._add_entry(frame, 1, "Average stope dip, °", "average_dip_deg", "75")
+        self._add_entry(frame, 2, "Stope width / ore thickness, m", "stope_width_m", "15")
+        self._add_entry(frame, 3, "Stope span / strike length, m", "stope_span_m", "30")
+        self._add_entry(frame, 4, "Hanging wall dip direction, °", "hanging_wall_dip_direction_deg", "90")
+
+    def _build_joint_sets_frame(self):
+        frame = ttk.LabelFrame(self.scrollable_frame, text="Discontinuity sets")
+        frame.grid(row=3, column=0, sticky="ew", padx=10, pady=8)
+
+        headers = ["Set", "Dip, °", "Dip direction, °"]
+        for col, header in enumerate(headers):
+            ttk.Label(frame, text=header, font=("Segoe UI", 9, "bold")).grid(
+                row=0,
+                column=col,
+                padx=6,
+                pady=4,
+                sticky="w",
+            )
+
+        defaults = [
+            ("Set 1", "30", "120"),
+            ("Set 2", "70", "210"),
+            ("Set 3", "", ""),
+            ("Set 4", "", ""),
+            ("Set 5", "", ""),
+        ]
+
+        for i, (name, dip, dip_dir) in enumerate(defaults, start=1):
+            ttk.Label(frame, text=name).grid(row=i, column=0, padx=6, pady=3, sticky="w")
+
+            dip_var = tk.StringVar(value=dip)
+            dip_dir_var = tk.StringVar(value=dip_dir)
+
+            ttk.Entry(frame, textvariable=dip_var, width=16).grid(
+                row=i,
+                column=1,
+                padx=6,
+                pady=3,
+                sticky="w",
+            )
+            ttk.Entry(frame, textvariable=dip_dir_var, width=16).grid(
+                row=i,
+                column=2,
+                padx=6,
+                pady=3,
+                sticky="w",
+            )
+
+            self.joint_entries.append(
+                {
+                    "dip": dip_var,
+                    "dip_direction": dip_dir_var,
+                }
+            )
+
+    def _build_surface_frame(self):
+        frame = ttk.LabelFrame(self.scrollable_frame, text="Surface parameters")
+        frame.grid(row=4, column=0, sticky="ew", padx=10, pady=8)
+
+        headers = ["Surface", "Dip, °", "Q'"]
+        for col, header in enumerate(headers):
+            ttk.Label(frame, text=header, font=("Segoe UI", 9, "bold")).grid(
+                row=0,
+                column=col,
+                padx=6,
+                pady=4,
+                sticky="w",
+            )
+
+        default_surfaces = [
+            (SurfaceType.CROWN, "0", "20"),
+            (SurfaceType.HANGING_WALL, "75", "20"),
+            (SurfaceType.FOOTWALL, "75", "20"),
+            (SurfaceType.END_WALL, "90", "20"),
+        ]
+
+        for row, (surface_type, dip, q_prime) in enumerate(default_surfaces, start=1):
+            ttk.Label(frame, text=surface_type.value).grid(
+                row=row,
+                column=0,
+                padx=6,
+                pady=3,
+                sticky="w",
+            )
+
+            dip_var = tk.StringVar(value=dip)
+            q_prime_var = tk.StringVar(value=q_prime)
+
+            ttk.Entry(frame, textvariable=dip_var, width=16).grid(
+                row=row,
+                column=1,
+                padx=6,
+                pady=3,
+                sticky="w",
+            )
+            ttk.Entry(frame, textvariable=q_prime_var, width=16).grid(
+                row=row,
+                column=2,
+                padx=6,
+                pady=3,
+                sticky="w",
+            )
+
+            self.surface_entries[surface_type] = {
+                "dip": dip_var,
+                "q_prime": q_prime_var,
+            }
+
+        ttk.Label(
+            frame,
+            text=(
+                "Surface dip direction is not entered here. It is derived from hanging wall dip direction, "
+                "as in the old prototype."
+            ),
+            foreground="#555555",
+        ).grid(row=5, column=0, columnspan=3, sticky="w", padx=6, pady=(8, 4))
+
+    def _build_buttons(self):
+        frame = ttk.Frame(self.scrollable_frame)
+        frame.grid(row=5, column=0, sticky="ew", padx=10, pady=8)
+
+        ttk.Button(
+            frame,
+            text="Calculate",
+            command=self.calculate,
+        ).pack(side="left", padx=(0, 8))
+
+        ttk.Button(
+            frame,
+            text="Save to Project Overview (v0.2)",
+            command=self.save_to_project_overview_placeholder,
+        ).pack(side="left", padx=(0, 8))
+
+    def _build_results_frame(self):
+        frame = ttk.LabelFrame(self.scrollable_frame, text="Calculation results")
+        frame.grid(row=6, column=0, sticky="nsew", padx=10, pady=8)
+
+        columns = (
+            "surface",
+            "dip",
+            "q_prime",
+            "a",
+            "b",
+            "c",
+            "n",
+            "hr",
+            "hro",
+            "stable_span",
+            "cave_span",
+            "rating_length",
+            "state",
+        )
+
+        self.results_tree = ttk.Treeview(frame, columns=columns, show="headings", height=7)
+
+        headings = {
+            "surface": "Surface",
+            "dip": "Dip, °",
+            "q_prime": "Q'",
+            "a": "A",
+            "b": "B",
+            "c": "C",
+            "n": "N",
+            "hr": "HR stable",
+            "hro": "HR cave",
+            "stable_span": "Stable span",
+            "cave_span": "Cave span",
+            "rating_length": "Rating length",
+            "state": "State",
+        }
+
+        widths = {
+            "surface": 120,
+            "dip": 70,
+            "q_prime": 70,
+            "a": 70,
+            "b": 70,
+            "c": 70,
+            "n": 80,
+            "hr": 90,
+            "hro": 90,
+            "stable_span": 110,
+            "cave_span": 110,
+            "rating_length": 110,
+            "state": 100,
+        }
+
+        for column in columns:
+            self.results_tree.heading(column, text=headings[column])
+            self.results_tree.column(column, width=widths[column], anchor="center")
+
+        self.results_tree.pack(fill="both", expand=True, padx=6, pady=6)
+
+        self.summary_var = tk.StringVar(value="No calculation performed yet.")
+        ttk.Label(
+            frame,
+            textvariable=self.summary_var,
+            font=("Segoe UI", 10, "bold"),
+        ).pack(anchor="w", padx=6, pady=(4, 8))
+
+    def _get_float(self, key: str) -> float:
+        raw_value = self.entries[key].get().strip().replace(",", ".")
+
+        if raw_value == "":
+            raise ValueError(f"Field '{key}' is empty.")
+
+        return float(raw_value)
+
+    def _get_string(self, key: str) -> str:
+        return self.entries[key].get().strip()
+
+    @staticmethod
+    def _parse_optional_float(raw_value: str):
+        raw_value = raw_value.strip().replace(",", ".")
+
+        if raw_value == "":
+            return None
+
+        return float(raw_value)
+
+    @staticmethod
+    def _format_length(value: float) -> str:
+        if value == float("inf") or math.isinf(value):
+            return "not limited"
+
+        return f"{value:.2f}"
+
+    def _collect_stope_input(self) -> StopeInput:
+        return StopeInput(
+            project_name=self._get_string("project_name"),
+            domain_name=self._get_string("domain_name"),
+            stope_id=self._get_string("stope_id"),
+            depth_m=self._get_float("depth_m"),
+            unit_weight_t_m3=self._get_float("unit_weight_t_m3"),
+            ucs_mpa=self._get_float("ucs_mpa"),
+            horizontal_stress_ratio=self._get_float("horizontal_stress_ratio"),
+            stope_height_m=self._get_float("stope_height_m"),
+            average_dip_deg=self._get_float("average_dip_deg"),
+            stope_width_m=self._get_float("stope_width_m"),
+            stope_span_m=self._get_float("stope_span_m"),
+            hanging_wall_dip_direction_deg=self._get_float("hanging_wall_dip_direction_deg"),
+        )
+
+    def _collect_joint_sets(self) -> list[JointSet]:
+        joint_sets: list[JointSet] = []
+
+        for i, joint_entry in enumerate(self.joint_entries, start=1):
+            dip = self._parse_optional_float(joint_entry["dip"].get())
+            dip_direction = self._parse_optional_float(joint_entry["dip_direction"].get())
+
+            if dip is None and dip_direction is None:
+                continue
+
+            if dip is None or dip_direction is None:
+                raise ValueError(f"Joint set {i}: both dip and dip direction must be filled.")
+
+            if not 0 <= dip <= 90:
+                raise ValueError(f"Joint set {i}: dip must be between 0 and 90 degrees.")
+
+            if not 0 <= dip_direction <= 360:
+                raise ValueError(f"Joint set {i}: dip direction must be between 0 and 360 degrees.")
+
+            joint_sets.append(
+                JointSet(
+                    name=f"Set {i}",
+                    dip_deg=dip,
+                    dip_direction_deg=dip_direction,
+                )
+            )
+
+        return joint_sets
+
+    def _collect_surface_inputs(self) -> list[SurfaceInput]:
+        surfaces: list[SurfaceInput] = []
+
+        for surface_type, fields in self.surface_entries.items():
+            dip = self._parse_optional_float(fields["dip"].get())
+            q_prime = self._parse_optional_float(fields["q_prime"].get())
+
+            if dip is None:
+                raise ValueError(f"{surface_type.value}: dip is empty.")
+            if q_prime is None:
+                raise ValueError(f"{surface_type.value}: Q' is empty.")
+
+            if not 0 <= dip <= 90:
+                raise ValueError(f"{surface_type.value}: dip must be between 0 and 90 degrees.")
+            if q_prime <= 0:
+                raise ValueError(f"{surface_type.value}: Q' must be greater than zero.")
+
+            surfaces.append(
+                SurfaceInput(
+                    surface_type=surface_type,
+                    dip_deg=dip,
+                    q_prime=q_prime,
+                )
+            )
+
+        return surfaces
+
+    def calculate(self):
+        try:
+            stope = self._collect_stope_input()
+            joint_sets = self._collect_joint_sets()
+            surfaces = self._collect_surface_inputs()
+
+            result = calculate_stope_result(
+                stope=stope,
+                surfaces=surfaces,
+                joint_sets=joint_sets,
+            )
+
+            self.last_result = result
+            self._show_result(result)
+
+        except Exception as error:
+            messagebox.showerror("Calculation error", str(error))
+
+    def _show_result(self, result):
+        for item in self.results_tree.get_children():
+            self.results_tree.delete(item)
+
+        for surface in result.surfaces:
+            self.results_tree.insert(
+                "",
+                "end",
+                values=(
+                    surface.surface_type.value,
+                    f"{surface.dip_deg:.1f}",
+                    f"{surface.q_prime:.2f}",
+                    f"{surface.stress_factor_a:.3f}",
+                    f"{surface.joint_factor_b:.3f}",
+                    f"{surface.surface_factor_c:.3f}",
+                    f"{surface.stability_number_n:.2f}",
+                    f"{surface.hr_stable:.2f}",
+                    f"{surface.hr_caving:.2f}",
+                    self._format_length(surface.stable_strike_length_m),
+                    self._format_length(surface.cave_strike_length_m),
+                    f"{surface.rating_length_m:.2f}",
+                    surface.stability_state.value,
+                ),
+            )
+
+        self.summary_var.set(
+            f"Final state: {result.final_state.value} | "
+            f"Limiting surface: {result.limiting_surface.value}"
+        )
+
+    def save_to_project_overview_placeholder(self):
+        if self.last_result is None:
+            messagebox.showinfo(
+                "No calculation",
+                "Run calculation first. Saving to Project Overview will be implemented in v0.2.",
+            )
+            return
+
+        messagebox.showinfo(
+            "v0.2 feature",
+            "Saving calculation results to Project Overview will be implemented in v0.2.",
+        )
