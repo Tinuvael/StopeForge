@@ -14,10 +14,11 @@ from core.stability import calculate_stope_result
 
 
 class CalculationTab(ttk.Frame):
-    def __init__(self, parent, on_save_result=None):
+    def __init__(self, parent, on_save_result=None, on_add_case_histories=None):
         super().__init__(parent)
 
         self.on_save_result = on_save_result
+        self.on_add_case_histories = on_add_case_histories
 
         self.entries: dict[str, tk.StringVar] = {}
         self.surface_entries: dict[SurfaceType, dict[str, tk.StringVar]] = {}
@@ -232,6 +233,12 @@ class CalculationTab(ttk.Frame):
             frame,
             text="Save to Project Overview",
             command=self.save_to_project_overview,
+        ).pack(side="left", padx=(0, 8))
+
+        ttk.Button(
+            frame,
+            text="Add to Case Histories",
+            command=self.add_to_case_histories,
         ).pack(side="left", padx=(0, 8))
 
         ttk.Button(
@@ -512,3 +519,22 @@ class CalculationTab(ttk.Frame):
 
         except Exception as error:
             messagebox.showerror("Export error", str(error))
+
+    def add_to_case_histories(self):
+        if self.last_result is None:
+            messagebox.showinfo(
+                "No calculation",
+                "Run calculation first.",
+            )
+            return
+
+        if self.on_add_case_histories is None:
+            messagebox.showerror(
+                "Save error",
+                "Case Histories tab is not connected.",
+            )
+            return
+
+        comment = self._get_string("comment")
+
+        self.on_add_case_histories(self.last_result, comment)
