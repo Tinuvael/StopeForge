@@ -3,6 +3,7 @@ from tkinter import ttk
 
 from gui.calculation_tab import CalculationTab
 from gui.project_overview_tab import ProjectOverviewTab
+from gui.case_histories_tab import CaseHistoriesTab
 from gui.placeholder_tab import PlaceholderTab
 
 
@@ -21,19 +22,12 @@ class StopeForgeApp(tk.Tk):
         notebook.pack(fill="both", expand=True)
 
         self.project_overview_tab = ProjectOverviewTab(notebook)
+        self.case_histories_tab = CaseHistoriesTab(notebook)
 
         self.calculation_tab = CalculationTab(
             notebook,
             on_save_result=self.project_overview_tab.add_result,
-        )
-
-        self.case_histories_tab = PlaceholderTab(
-            notebook,
-            title="Case Histories",
-            message=(
-                "Case history database will be implemented in a later version.\n\n"
-                "This tab will store observed stope performance."
-            ),
+            on_add_case_histories=self.case_histories_tab.add_from_current_result,
         )
 
         self.graph_tab = PlaceholderTab(
@@ -49,8 +43,8 @@ class StopeForgeApp(tk.Tk):
             notebook,
             title="Export",
             message=(
-                "Export tools will be implemented in a later version.\n\n"
-                "Planned exports: current calculation table, project overview, case histories, graph."
+                "Export tools will be expanded in a later version.\n\n"
+                "Current exports: calculation, project overview, case histories."
             ),
         )
 
