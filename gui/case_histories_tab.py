@@ -1,7 +1,14 @@
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
+from pathlib import Path
+from core.case_import import import_case_histories_from_excel
 
-from core.case_store import load_cases, save_cases, DEFAULT_CASES_PATH
+from core.case_store import (
+    load_cases,
+    save_cases,
+    create_empty_cases_file,
+    DEFAULT_CASES_PATH,
+)
 from core.export_excel import export_project_overview_to_excel
 from core.models import SurfaceType, StopeResult
 
@@ -14,6 +21,9 @@ OBSERVED_STATES = [
 ]
 
 
+ALL_VALUE = "All"
+
+
 def _safe_round(value, digits: int = 2):
     try:
         return round(float(value), digits)
@@ -22,21 +32,6 @@ def _safe_round(value, digits: int = 2):
 
 
 def _calculate_shape_factor_hr(surface_type: SurfaceType, stope) -> float:
-    """
-    Actual hydraulic radius / shape factor for plotting case histories.
-
-    Crown:
-        area = width * span
-        perimeter = 2 * (width + span)
-
-    Hanging wall / Footwall:
-        area = height * span
-        perimeter = 2 * (height + span)
-
-    End wall:
-        area = height * width
-        perimeter = 2 * (height + width)
-    """
     height = stope.stope_height_m
     width = stope.stope_width_m
     span = stope.stope_span_m
@@ -63,8 +58,15 @@ class CaseHistoriesTab(ttk.Frame):
     def __init__(self, parent):
         super().__init__(parent)
 
+        self.database_path = Path(DEFAULT_CASES_PATH)
         self.rows: list[dict] = []
+        self.filtered_rows: list[dict] = []
         self.selected_item_id = None
+
+        self.project_filter_var = tk.StringVar(value=ALL_VALUE)
+        self.domain_filter_var = tk.StringVar(value=ALL_VALUE)
+        self.surface_filter_var = tk.StringVar(value=ALL_VALUE)
+        self.observed_filter_var = tk.StringVar(value=ALL_VALUE)
 
         self._build_ui()
         self.load_from_database()
@@ -73,7 +75,15 @@ class CaseHistoriesTab(ttk.Frame):
         container = ttk.Frame(self)
         container.pack(fill="both", expand=True, padx=10, pady=10)
 
-        title_frame = ttk.Frame(container)
+        self._build_title_bar(container)
+        self._build_database_bar(container)
+        self._build_filters(container)
+        self._build_editor(container)
+        self._build_table(container)
+        self._build_summary(container)
+
+    def _build_title_bar(self, parent):
+        title_frame = ttk.Frame(parent)
         title_frame.pack(fill="x", pady=(0, 8))
 
         ttk.Label(
@@ -84,15 +94,15 @@ class CaseHistoriesTab(ttk.Frame):
 
         ttk.Button(
             title_frame,
-            text="Reload database",
-            command=self.load_from_database,
-        ).pack(side="right")
+            text="Import from Excel",
+            command=self.import_from_excel,
+        ).pack(side="right", padx=(0, 8))
 
         ttk.Button(
             title_frame,
             text="Export to Excel",
             command=self.export_to_excel,
-        ).pack(side="right", padx=(0, 8))
+        ).pack(side="right")
 
         ttk.Button(
             title_frame,
@@ -100,7 +110,109 @@ class CaseHistoriesTab(ttk.Frame):
             command=self.save_database,
         ).pack(side="right", padx=(0, 8))
 
-        edit_frame = ttk.LabelFrame(container, text="Edit selected case")
+    def _build_database_bar(self, parent):
+        database_frame = ttk.LabelFrame(parent, text="Case history database")
+        database_frame.pack(fill="x", pady=(0, 8))
+
+        self.database_path_var = tk.StringVar(value=str(self.database_path))
+
+        ttk.Label(database_frame, text="Current file").grid(
+            row=0,
+            column=0,
+            padx=6,
+            pady=6,
+            sticky="w",
+        )
+
+        ttk.Entry(
+            database_frame,
+            textvariable=self.database_path_var,
+            state="readonly",
+            width=90,
+        ).grid(row=0, column=1, padx=6, pady=6, sticky="ew")
+
+        ttk.Button(
+            database_frame,
+            text="New database",
+            command=self.new_database,
+        ).grid(row=0, column=2, padx=6, pady=6)
+
+        ttk.Button(
+            database_frame,
+            text="Load database",
+            command=self.load_database_as,
+        ).grid(row=0, column=3, padx=6, pady=6)
+
+        ttk.Button(
+            database_frame,
+            text="Save as...",
+            command=self.save_database_as,
+        ).grid(row=0, column=4, padx=6, pady=6)
+
+        database_frame.columnconfigure(1, weight=1)
+
+    def _build_filters(self, parent):
+        filter_frame = ttk.LabelFrame(parent, text="Filters")
+        filter_frame.pack(fill="x", pady=(0, 8))
+
+        ttk.Label(filter_frame, text="Project").grid(row=0, column=0, padx=6, pady=6, sticky="w")
+        self.project_filter_combo = ttk.Combobox(
+            filter_frame,
+            textvariable=self.project_filter_var,
+            state="readonly",
+            width=22,
+        )
+        self.project_filter_combo.grid(row=0, column=1, padx=6, pady=6, sticky="w")
+
+        ttk.Label(filter_frame, text="Domain").grid(row=0, column=2, padx=6, pady=6, sticky="w")
+        self.domain_filter_combo = ttk.Combobox(
+            filter_frame,
+            textvariable=self.domain_filter_var,
+            state="readonly",
+            width=22,
+        )
+        self.domain_filter_combo.grid(row=0, column=3, padx=6, pady=6, sticky="w")
+
+        ttk.Label(filter_frame, text="Surface").grid(row=0, column=4, padx=6, pady=6, sticky="w")
+        self.surface_filter_combo = ttk.Combobox(
+            filter_frame,
+            textvariable=self.surface_filter_var,
+            state="readonly",
+            width=18,
+        )
+        self.surface_filter_combo.grid(row=0, column=5, padx=6, pady=6, sticky="w")
+
+        ttk.Label(filter_frame, text="Observed").grid(row=0, column=6, padx=6, pady=6, sticky="w")
+        self.observed_filter_combo = ttk.Combobox(
+            filter_frame,
+            textvariable=self.observed_filter_var,
+            state="readonly",
+            width=18,
+        )
+        self.observed_filter_combo.grid(row=0, column=7, padx=6, pady=6, sticky="w")
+
+        ttk.Button(
+            filter_frame,
+            text="Apply filters",
+            command=self.apply_filters,
+        ).grid(row=0, column=8, padx=6, pady=6)
+
+        ttk.Button(
+            filter_frame,
+            text="Reset filters",
+            command=self.reset_filters,
+        ).grid(row=0, column=9, padx=6, pady=6)
+
+        for combo in (
+            self.project_filter_combo,
+            self.domain_filter_combo,
+            self.surface_filter_combo,
+            self.observed_filter_combo,
+        ):
+            combo.bind("<<ComboboxSelected>>", lambda _event: self.apply_filters())
+
+    def _build_editor(self, parent):
+        edit_frame = ttk.LabelFrame(parent, text="Edit selected case")
         edit_frame.pack(fill="x", pady=(0, 8))
 
         ttk.Label(edit_frame, text="Observed state").grid(row=0, column=0, padx=6, pady=6, sticky="w")
@@ -130,11 +242,26 @@ class CaseHistoriesTab(ttk.Frame):
             command=self.apply_to_selected,
         ).grid(row=0, column=4, padx=6, pady=6, sticky="w")
 
+        ttk.Button(
+            edit_frame,
+            text="Delete selected",
+            command=self.delete_selected,
+        ).grid(row=0, column=5, padx=6, pady=6, sticky="w")
+
+    def _build_table(self, parent):
+        table_frame = ttk.Frame(parent)
+        table_frame.pack(fill="both", expand=True)
+
         columns = (
             "project",
             "domain",
             "stope_id",
             "surface",
+            "depth",
+            "height",
+            "avg_dip",
+            "width",
+            "span",
             "q_prime",
             "a",
             "b",
@@ -146,13 +273,18 @@ class CaseHistoriesTab(ttk.Frame):
             "comment",
         )
 
-        self.tree = ttk.Treeview(container, columns=columns, show="headings", height=20)
+        self.tree = ttk.Treeview(table_frame, columns=columns, show="headings", height=20)
 
         headings = {
             "project": "Project",
             "domain": "Domain",
             "stope_id": "Stope ID",
             "surface": "Surface",
+            "depth": "Depth",
+            "height": "Height",
+            "avg_dip": "Avg Dip",
+            "width": "Width",
+            "span": "Span",
             "q_prime": "Q'",
             "a": "A",
             "b": "B",
@@ -169,6 +301,11 @@ class CaseHistoriesTab(ttk.Frame):
             "domain": 120,
             "stope_id": 100,
             "surface": 120,
+            "depth": 70,
+            "height": 70,
+            "avg_dip": 75,
+            "width": 70,
+            "span": 70,
             "q_prime": 70,
             "a": 70,
             "b": 70,
@@ -184,23 +321,27 @@ class CaseHistoriesTab(ttk.Frame):
             self.tree.heading(column, text=headings[column])
             self.tree.column(column, width=widths[column], anchor="center")
 
-        vertical_scrollbar = ttk.Scrollbar(container, orient="vertical", command=self.tree.yview)
-        horizontal_scrollbar = ttk.Scrollbar(container, orient="horizontal", command=self.tree.xview)
+        vertical_scrollbar = ttk.Scrollbar(table_frame, orient="vertical", command=self.tree.yview)
+        horizontal_scrollbar = ttk.Scrollbar(table_frame, orient="horizontal", command=self.tree.xview)
 
         self.tree.configure(
             yscrollcommand=vertical_scrollbar.set,
             xscrollcommand=horizontal_scrollbar.set,
         )
 
-        self.tree.pack(side="left", fill="both", expand=True)
-        vertical_scrollbar.pack(side="right", fill="y")
-        horizontal_scrollbar.pack(side="bottom", fill="x")
+        self.tree.grid(row=0, column=0, sticky="nsew")
+        vertical_scrollbar.grid(row=0, column=1, sticky="ns")
+        horizontal_scrollbar.grid(row=1, column=0, sticky="ew")
+
+        table_frame.rowconfigure(0, weight=1)
+        table_frame.columnconfigure(0, weight=1)
 
         self.tree.bind("<<TreeviewSelect>>", self.on_select)
 
+    def _build_summary(self, parent):
         self.summary_var = tk.StringVar(value="No case histories loaded.")
         ttk.Label(
-            container,
+            parent,
             textvariable=self.summary_var,
             font=("Segoe UI", 10, "bold"),
         ).pack(anchor="w", pady=(8, 0))
@@ -236,7 +377,8 @@ class CaseHistoriesTab(ttk.Frame):
             new_rows.append(row)
 
         self.rows.extend(new_rows)
-        self.refresh_table()
+        self.update_filter_values()
+        self.apply_filters()
         self.save_database()
 
         messagebox.showinfo(
@@ -245,11 +387,69 @@ class CaseHistoriesTab(ttk.Frame):
             "Observed state is set to Unknown. Select rows and update it manually.",
         )
 
-    def refresh_table(self):
+    def update_filter_values(self):
+        projects = sorted({row.get("project", "") for row in self.rows if row.get("project", "")})
+        domains = sorted({row.get("domain", "") for row in self.rows if row.get("domain", "")})
+        surfaces = sorted({row.get("surface", "") for row in self.rows if row.get("surface", "")})
+        observed_states = sorted(
+            {row.get("observed_state", "Unknown") for row in self.rows if row.get("observed_state", "Unknown")}
+        )
+
+        self.project_filter_combo["values"] = [ALL_VALUE] + projects
+        self.domain_filter_combo["values"] = [ALL_VALUE] + domains
+        self.surface_filter_combo["values"] = [ALL_VALUE] + surfaces
+        self.observed_filter_combo["values"] = [ALL_VALUE] + observed_states
+
+        if self.project_filter_var.get() not in self.project_filter_combo["values"]:
+            self.project_filter_var.set(ALL_VALUE)
+        if self.domain_filter_var.get() not in self.domain_filter_combo["values"]:
+            self.domain_filter_var.set(ALL_VALUE)
+        if self.surface_filter_var.get() not in self.surface_filter_combo["values"]:
+            self.surface_filter_var.set(ALL_VALUE)
+        if self.observed_filter_var.get() not in self.observed_filter_combo["values"]:
+            self.observed_filter_var.set(ALL_VALUE)
+
+    def get_filtered_rows(self) -> list[dict]:
+        project_filter = self.project_filter_var.get()
+        domain_filter = self.domain_filter_var.get()
+        surface_filter = self.surface_filter_var.get()
+        observed_filter = self.observed_filter_var.get()
+
+        filtered = []
+
+        for row in self.rows:
+            if project_filter != ALL_VALUE and row.get("project", "") != project_filter:
+                continue
+            if domain_filter != ALL_VALUE and row.get("domain", "") != domain_filter:
+                continue
+            if surface_filter != ALL_VALUE and row.get("surface", "") != surface_filter:
+                continue
+            if observed_filter != ALL_VALUE and row.get("observed_state", "Unknown") != observed_filter:
+                continue
+
+            filtered.append(row)
+
+        return filtered
+
+    def apply_filters(self):
+        self.filtered_rows = self.get_filtered_rows()
+        self.refresh_table(self.filtered_rows)
+
+    def reset_filters(self):
+        self.project_filter_var.set(ALL_VALUE)
+        self.domain_filter_var.set(ALL_VALUE)
+        self.surface_filter_var.set(ALL_VALUE)
+        self.observed_filter_var.set(ALL_VALUE)
+        self.apply_filters()
+
+    def refresh_table(self, rows: list[dict] | None = None):
+        if rows is None:
+            rows = self.rows
+
         for item in self.tree.get_children():
             self.tree.delete(item)
 
-        for row in self.rows:
+        for row in rows:
             self.tree.insert(
                 "",
                 "end",
@@ -258,6 +458,11 @@ class CaseHistoriesTab(ttk.Frame):
                     row.get("domain", ""),
                     row.get("stope_id", ""),
                     row.get("surface", ""),
+                    row.get("depth_m", ""),
+                    row.get("height_m", ""),
+                    row.get("avg_dip_deg", ""),
+                    row.get("width_m", ""),
+                    row.get("span_m", ""),
                     row.get("q_prime", ""),
                     row.get("a", ""),
                     row.get("b", ""),
@@ -271,7 +476,7 @@ class CaseHistoriesTab(ttk.Frame):
             )
 
         self.summary_var.set(
-            f"Case histories: {len(self.rows)} | Database: {DEFAULT_CASES_PATH}"
+            f"Shown: {len(rows)} / Total: {len(self.rows)} | Database: {self.database_path}"
         )
 
     def on_select(self, _event=None):
@@ -284,10 +489,10 @@ class CaseHistoriesTab(ttk.Frame):
         self.selected_item_id = selection[0]
         row_index = self.tree.index(self.selected_item_id)
 
-        if row_index < 0 or row_index >= len(self.rows):
+        if row_index < 0 or row_index >= len(self.filtered_rows):
             return
 
-        row = self.rows[row_index]
+        row = self.filtered_rows[row_index]
 
         self.observed_state_var.set(row.get("observed_state", "Unknown"))
         self.comment_var.set(row.get("comment", ""))
@@ -305,26 +510,116 @@ class CaseHistoriesTab(ttk.Frame):
         for item_id in selection:
             row_index = self.tree.index(item_id)
 
-            if 0 <= row_index < len(self.rows):
-                self.rows[row_index]["observed_state"] = observed_state
-                self.rows[row_index]["comment"] = comment
+            if 0 <= row_index < len(self.filtered_rows):
+                selected_row = self.filtered_rows[row_index]
+                selected_row["observed_state"] = observed_state
+                selected_row["comment"] = comment
 
-        self.refresh_table()
+        self.update_filter_values()
+        self.apply_filters()
+        self.save_database()
+
+    def delete_selected(self):
+        selection = self.tree.selection()
+
+        if not selection:
+            messagebox.showinfo("No selection", "Select one or more case rows first.")
+            return
+
+        answer = messagebox.askyesno(
+            "Delete selected cases",
+            "Delete selected case rows from the database?",
+        )
+
+        if not answer:
+            return
+
+        rows_to_delete = []
+
+        for item_id in selection:
+            row_index = self.tree.index(item_id)
+
+            if 0 <= row_index < len(self.filtered_rows):
+                rows_to_delete.append(self.filtered_rows[row_index])
+
+        self.rows = [row for row in self.rows if row not in rows_to_delete]
+
+        self.update_filter_values()
+        self.apply_filters()
         self.save_database()
 
     def load_from_database(self):
-        self.rows = load_cases(DEFAULT_CASES_PATH)
-        self.refresh_table()
+        self.rows = load_cases(self.database_path)
+        self.update_filter_values()
+        self.apply_filters()
 
     def save_database(self):
-        save_cases(self.rows, DEFAULT_CASES_PATH)
+        save_cases(self.rows, self.database_path)
+        self.database_path_var.set(str(self.database_path))
         self.summary_var.set(
-            f"Case histories: {len(self.rows)} | Saved to: {DEFAULT_CASES_PATH}"
+            f"Shown: {len(self.filtered_rows)} / Total: {len(self.rows)} | Saved to: {self.database_path}"
         )
 
+    def new_database(self):
+        output_path = filedialog.asksaveasfilename(
+            title="Create new case history database",
+            defaultextension=".csv",
+            filetypes=[("CSV database", "*.csv")],
+            initialfile="case_histories.csv",
+        )
+
+        if not output_path:
+            return
+
+        answer = messagebox.askyesno(
+            "Create new database",
+            "Create a new empty case history database?\n\n"
+            "Unsaved changes in the current database should be saved first.",
+        )
+
+        if not answer:
+            return
+
+        self.database_path = create_empty_cases_file(output_path)
+        self.rows = []
+        self.reset_filters()
+        self.update_filter_values()
+        self.database_path_var.set(str(self.database_path))
+        self.save_database()
+
+    def load_database_as(self):
+        input_path = filedialog.askopenfilename(
+            title="Load case history database",
+            filetypes=[("CSV database", "*.csv"), ("All files", "*.*")],
+        )
+
+        if not input_path:
+            return
+
+        self.database_path = Path(input_path)
+        self.database_path_var.set(str(self.database_path))
+        self.load_from_database()
+
+    def save_database_as(self):
+        output_path = filedialog.asksaveasfilename(
+            title="Save case history database as",
+            defaultextension=".csv",
+            filetypes=[("CSV database", "*.csv")],
+            initialfile=Path(self.database_path).name,
+        )
+
+        if not output_path:
+            return
+
+        self.database_path = Path(output_path)
+        self.database_path_var.set(str(self.database_path))
+        self.save_database()
+
     def export_to_excel(self):
-        if not self.rows:
-            messagebox.showinfo("No data", "Case Histories table is empty.")
+        rows_to_export = self.get_filtered_rows()
+
+        if not rows_to_export:
+            messagebox.showinfo("No data", "There are no case histories to export.")
             return
 
         output_path = filedialog.asksaveasfilename(
@@ -337,10 +632,9 @@ class CaseHistoriesTab(ttk.Frame):
         if not output_path:
             return
 
-        # Reuse simple table exporter for now.
         export_rows = []
 
-        for row in self.rows:
+        for row in rows_to_export:
             export_rows.append(
                 {
                     "project": row.get("project", ""),
@@ -362,7 +656,49 @@ class CaseHistoriesTab(ttk.Frame):
 
             messagebox.showinfo(
                 "Export complete",
-                f"Case histories were exported to:\n{output_path}",
+                f"Filtered case histories were exported to:\n{output_path}",
             )
         except Exception as error:
             messagebox.showerror("Export error", str(error))
+    def import_from_excel(self):
+        input_path = filedialog.askopenfilename(
+            title="Import case histories from Excel",
+            filetypes=[
+                ("Excel workbook", "*.xlsx"),
+                ("All files", "*.*"),
+            ],
+        )
+
+        if not input_path:
+            return
+
+        try:
+            imported_rows = import_case_histories_from_excel(input_path)
+
+            if not imported_rows:
+                messagebox.showinfo(
+                    "No rows imported",
+                    "No valid case history rows were found in the selected Excel file.",
+                )
+                return
+
+            answer = messagebox.askyesno(
+                "Import case histories",
+                f"Import {len(imported_rows)} case history rows from Excel?",
+            )
+
+            if not answer:
+                return
+
+            self.rows.extend(imported_rows)
+            self.update_filter_values()
+            self.apply_filters()
+            self.save_database()
+
+            messagebox.showinfo(
+                "Import complete",
+                f"Imported rows: {len(imported_rows)}",
+            )
+
+        except Exception as error:
+            messagebox.showerror("Import error", str(error))
