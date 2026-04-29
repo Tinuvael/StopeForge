@@ -1,9 +1,9 @@
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 
+import numpy as np
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 from matplotlib.figure import Figure
-
 
 ALL_VALUE = "All"
 
@@ -32,6 +32,26 @@ STATE_STYLES = {
 }
 
 
+LOCAL_BOUNDARY_PRESETS = {
+    "Manual": None,
+    "Mayskoe RZ-1": {
+        "name": "Mayskoe RZ-1 boundary",
+        "slope": 0.5093,
+        "intercept": -0.8149,
+    },
+    "Mayskoe RZ-2": {
+        "name": "Mayskoe RZ-2 boundary",
+        "slope": 0.7787,
+        "intercept": -1.2857,
+    },
+    "Mayskoe RZ-4": {
+        "name": "Mayskoe RZ-4 boundary",
+        "slope": 1.3736,
+        "intercept": -1.9981,
+    },
+}
+
+
 def _safe_float(value):
     try:
         if value is None:
@@ -46,6 +66,10 @@ def _safe_float(value):
 
     except Exception:
         return None
+
+def _sigmoid(value):
+    value = np.clip(value, -60, 60)
+    return 1.0 / (1.0 + np.exp(-value))
 
 
 class StabilityGraphTab(ttk.Frame):
@@ -63,6 +87,13 @@ class StabilityGraphTab(ttk.Frame):
         self.log_y_var = tk.BooleanVar(value=True)
         self.show_labels_var = tk.BooleanVar(value=False)
 
+        self.show_boundary_var = tk.BooleanVar(value=False)
+        self.boundary_preset_var = tk.StringVar(value="Manual")
+        self.boundary_name_var = tk.StringVar(value="Local boundary")
+        self.boundary_slope_var = tk.StringVar(value="1.0")
+        self.boundary_intercept_var = tk.StringVar(value="0.0")
+        self.visible_stats_var = tk.StringVar(value="Visible cases: no data")
+
         self._build_ui()
 
     def _build_ui(self):
@@ -71,6 +102,7 @@ class StabilityGraphTab(ttk.Frame):
 
         self._build_title_bar(container)
         self._build_filters(container)
+        self._build_local_boundary_controls(container)
         self._build_graph(container)
         self.refresh_filters()
         self.refresh_graph()
@@ -184,6 +216,76 @@ class StabilityGraphTab(ttk.Frame):
         ):
             combo.bind("<<ComboboxSelected>>", lambda _event: self.refresh_graph())
 
+    def _build_local_boundary_controls(self, parent):
+        boundary_frame = ttk.LabelFrame(parent, text="Local Boundary / Calibration")
+        boundary_frame.pack(fill="x", pady=(0, 8))
+
+        ttk.Checkbutton(
+            boundary_frame,
+            text="Show boundary",
+            variable=self.show_boundary_var,
+            command=self.refresh_graph,
+        ).grid(row=0, column=0, padx=6, pady=6, sticky="w")
+
+        ttk.Label(boundary_frame, text="Preset").grid(row=0, column=1, padx=6, pady=6, sticky="w")
+
+        self.boundary_preset_combo = ttk.Combobox(
+            boundary_frame,
+            textvariable=self.boundary_preset_var,
+            values=list(LOCAL_BOUNDARY_PRESETS.keys()),
+            state="readonly",
+            width=18,
+        )
+        self.boundary_preset_combo.grid(row=0, column=2, padx=6, pady=6, sticky="w")
+        self.boundary_preset_combo.bind("<<ComboboxSelected>>", lambda _event: self.apply_boundary_preset())
+
+        ttk.Label(boundary_frame, text="Name").grid(row=0, column=3, padx=6, pady=6, sticky="w")
+        ttk.Entry(
+            boundary_frame,
+            textvariable=self.boundary_name_var,
+            width=26,
+        ).grid(row=0, column=4, padx=6, pady=6, sticky="w")
+
+        ttk.Label(boundary_frame, text="a / slope").grid(row=0, column=5, padx=6, pady=6, sticky="w")
+        ttk.Entry(
+            boundary_frame,
+            textvariable=self.boundary_slope_var,
+            width=10,
+        ).grid(row=0, column=6, padx=6, pady=6, sticky="w")
+
+        ttk.Label(boundary_frame, text="b / intercept").grid(row=0, column=7, padx=6, pady=6, sticky="w")
+        ttk.Entry(
+            boundary_frame,
+            textvariable=self.boundary_intercept_var,
+            width=10,
+        ).grid(row=0, column=8, padx=6, pady=6, sticky="w")
+
+        ttk.Button(
+            boundary_frame,
+            text="Apply boundary",
+            command=self.refresh_graph,
+        ).grid(row=0, column=9, padx=6, pady=6)
+
+        ttk.Button(
+            boundary_frame,
+            text="Fit boundary from visible points",
+            command=self.fit_boundary_from_visible_points,
+        ).grid(row=0, column=10, padx=6, pady=6)
+
+
+        ttk.Label(
+            boundary_frame,
+            text="Equation: N = a × HR + b",
+            foreground="#555555",
+        ).grid(row=1, column=0, columnspan=5, padx=6, pady=(0, 6), sticky="w")
+
+        ttk.Label(
+            boundary_frame,
+            textvariable=self.visible_stats_var,
+            foreground="#555555",
+        ).grid(row=1, column=5, columnspan=6, padx=6, pady=(0, 6), sticky="w")
+
+
     def _build_graph(self, parent):
         graph_frame = ttk.Frame(parent)
         graph_frame.pack(fill="both", expand=True)
@@ -207,6 +309,19 @@ class StabilityGraphTab(ttk.Frame):
             textvariable=self.summary_var,
             font=("Segoe UI", 10, "bold"),
         ).pack(anchor="w", pady=(8, 0))
+
+    def apply_boundary_preset(self):
+        preset_name = self.boundary_preset_var.get()
+        preset = LOCAL_BOUNDARY_PRESETS.get(preset_name)
+
+        if preset is None:
+            return
+
+        self.boundary_name_var.set(preset["name"])
+        self.boundary_slope_var.set(str(preset["slope"]))
+        self.boundary_intercept_var.set(str(preset["intercept"]))
+        self.show_boundary_var.set(True)
+        self.refresh_graph()
 
     def _get_all_rows(self) -> list[dict]:
         if self.get_case_rows_callback is None:
@@ -274,13 +389,13 @@ class StabilityGraphTab(ttk.Frame):
 
         rows = self.get_filtered_rows()
         points = self._prepare_points(rows)
+        self._update_visible_stats(points)
 
         self.ax.clear()
 
         self.ax.set_title("Mathews–Potvin Stability Graph")
         self.ax.set_xlabel("Hydraulic Radius / Shape Factor HR, m")
         self.ax.set_ylabel("Mathews Stability Number N")
-
         self.ax.grid(True, which="both", linestyle="--", linewidth=0.5, alpha=0.6)
 
         if self.log_x_var.get():
@@ -289,7 +404,48 @@ class StabilityGraphTab(ttk.Frame):
         if self.log_y_var.get():
             self.ax.set_yscale("log")
 
-        if not points:
+        plotted_states = set()
+
+        if points:
+            for state_name, style in STATE_STYLES.items():
+                state_points = [point for point in points if point["observed_state"] == state_name]
+
+                if not state_points:
+                    continue
+
+                x_values = [point["hr"] for point in state_points]
+                y_values = [point["n"] for point in state_points]
+
+                self.ax.scatter(
+                    x_values,
+                    y_values,
+                    c=style["color"],
+                    marker=style["marker"],
+                    label=style["label"],
+                    s=55,
+                    edgecolors="black" if style["marker"] != "x" else None,
+                    linewidths=0.5,
+                    alpha=0.85,
+                )
+
+                plotted_states.add(state_name)
+
+                if self.show_labels_var.get():
+                    for point in state_points:
+                        self.ax.annotate(
+                            point["label"],
+                            (point["hr"], point["n"]),
+                            textcoords="offset points",
+                            xytext=(4, 4),
+                            fontsize=8,
+                        )
+
+        if self.show_boundary_var.get():
+            self._plot_local_boundary(points)
+
+        if points or self.show_boundary_var.get():
+            self.ax.legend(loc="best")
+        else:
             self.ax.text(
                 0.5,
                 0.5,
@@ -299,46 +455,7 @@ class StabilityGraphTab(ttk.Frame):
                 va="center",
                 fontsize=11,
             )
-            self.summary_var.set(f"Shown points: 0 / Filtered rows: {len(rows)}")
-            self.canvas.draw()
-            return
 
-        plotted_states = set()
-
-        for state_name, style in STATE_STYLES.items():
-            state_points = [point for point in points if point["observed_state"] == state_name]
-
-            if not state_points:
-                continue
-
-            x_values = [point["hr"] for point in state_points]
-            y_values = [point["n"] for point in state_points]
-
-            self.ax.scatter(
-                x_values,
-                y_values,
-                c=style["color"],
-                marker=style["marker"],
-                label=style["label"],
-                s=55,
-                edgecolors="black" if style["marker"] != "x" else None,
-                linewidths=0.5,
-                alpha=0.85,
-            )
-
-            plotted_states.add(state_name)
-
-            if self.show_labels_var.get():
-                for point in state_points:
-                    self.ax.annotate(
-                        point["label"],
-                        (point["hr"], point["n"]),
-                        textcoords="offset points",
-                        xytext=(4, 4),
-                        fontsize=8,
-                    )
-
-        self.ax.legend(loc="best")
         self.figure.tight_layout()
 
         self.summary_var.set(
@@ -347,6 +464,59 @@ class StabilityGraphTab(ttk.Frame):
         )
 
         self.canvas.draw()
+
+    def _plot_local_boundary(self, points: list[dict]):
+        slope = _safe_float(self.boundary_slope_var.get())
+        intercept = _safe_float(self.boundary_intercept_var.get())
+
+        if slope is None or intercept is None:
+            messagebox.showerror(
+                "Boundary error",
+                "Boundary slope and intercept must be valid numbers.",
+            )
+            self.show_boundary_var.set(False)
+            return
+
+        x_min, x_max = self._get_boundary_x_range(points)
+
+        if x_min <= 0 or x_max <= 0 or x_min >= x_max:
+            return
+
+        x_values = np.linspace(x_min, x_max, 200)
+        y_values = slope * x_values + intercept
+
+        valid_x = []
+        valid_y = []
+
+        for x, y in zip(x_values, y_values):
+            if y > 0:
+                valid_x.append(x)
+                valid_y.append(y)
+
+        if not valid_x:
+            return
+
+        label = self.boundary_name_var.get().strip() or "Local boundary"
+
+        self.ax.plot(
+            valid_x,
+            valid_y,
+            linestyle="--",
+            linewidth=2.0,
+            color="black",
+            label=f"{label}: N = {slope:g}×HR + {intercept:g}",
+        )
+
+    def _get_boundary_x_range(self, points: list[dict]) -> tuple[float, float]:
+        if points:
+            hr_values = [point["hr"] for point in points if point["hr"] > 0]
+
+            if hr_values:
+                x_min = min(hr_values) * 0.8
+                x_max = max(hr_values) * 1.2
+                return max(x_min, 0.001), x_max
+
+        return 0.1, 10.0
 
     def _prepare_points(self, rows: list[dict]) -> list[dict]:
         points = []
@@ -384,11 +554,168 @@ class StabilityGraphTab(ttk.Frame):
 
         return points
 
+    def _update_visible_stats(self, points: list[dict]):
+        counts = {
+            "Stable": 0,
+            "Unstable": 0,
+            "Caved": 0,
+            "Unknown": 0,
+        }
+
+        for point in points:
+            state = point.get("observed_state", "Unknown")
+
+            if state not in counts:
+                state = "Unknown"
+
+            counts[state] += 1
+
+        self.visible_stats_var.set(
+            "Visible cases: "
+            f"Stable={counts['Stable']} | "
+            f"Unstable={counts['Unstable']} | "
+            f"Caved={counts['Caved']} | "
+            f"Unknown={counts['Unknown']}"
+        )
+
+
+    def fit_boundary_from_visible_points(self):
+        rows = self.get_filtered_rows()
+        points = self._prepare_points(rows)
+
+        usable_points = [
+            point for point in points
+            if point["observed_state"] in ("Stable", "Unstable", "Caved")
+        ]
+
+        stable_count = sum(1 for point in usable_points if point["observed_state"] == "Stable")
+        problem_count = sum(1 for point in usable_points if point["observed_state"] in ("Unstable", "Caved"))
+
+        if len(usable_points) < 8:
+            messagebox.showwarning(
+                "Insufficient data",
+                "At least 8 classified points are recommended for boundary fitting.",
+            )
+
+        if stable_count < 3 or problem_count < 3:
+            messagebox.showerror(
+                "Cannot fit boundary",
+                "Need at least 3 Stable and 3 Unstable/Caved points in the visible filtered dataset.",
+            )
+            return
+
+        try:
+            slope, intercept, accuracy = self._fit_linear_boundary_logistic(usable_points)
+
+            self.boundary_name_var.set("Fitted local boundary")
+            self.boundary_slope_var.set(f"{slope:.6g}")
+            self.boundary_intercept_var.set(f"{intercept:.6g}")
+            self.show_boundary_var.set(True)
+            self.boundary_preset_var.set("Manual")
+
+            self.refresh_graph()
+
+            messagebox.showinfo(
+                "Boundary fitted",
+                "Fitted local boundary:\n\n"
+                f"N = {slope:.6g} × HR + {intercept:.6g}\n\n"
+                f"Stable points: {stable_count}\n"
+                f"Unstable/Caved points: {problem_count}\n"
+                f"Training accuracy: {accuracy:.1f}%\n\n"
+                "This is a preliminary statistical boundary. Check it visually and do not treat it as a final design criterion without engineering review.",
+            )
+
+        except Exception as error:
+            messagebox.showerror("Fit error", str(error))
+
+
+    def _fit_linear_boundary_logistic(self, points: list[dict]) -> tuple[float, float, float]:
+        """
+        Fit a simple linear boundary:
+
+            N = a * HR + b
+
+        using logistic regression on visible case history points.
+
+        Stable = 1
+        Unstable/Caved = 0
+
+        The fitted classifier is:
+
+            z = w0 + w1 * HR + w2 * N
+
+        Boundary is z = 0:
+
+            N = -(w0 + w1 * HR) / w2
+        """
+        x_values = np.array([point["hr"] for point in points], dtype=float)
+        y_values = np.array([point["n"] for point in points], dtype=float)
+
+        labels = np.array(
+            [1.0 if point["observed_state"] == "Stable" else 0.0 for point in points],
+            dtype=float,
+        )
+
+        # Standardize features for stable optimization.
+        x_mean = float(np.mean(x_values))
+        x_std = float(np.std(x_values)) or 1.0
+        y_mean = float(np.mean(y_values))
+        y_std = float(np.std(y_values)) or 1.0
+
+        x_scaled = (x_values - x_mean) / x_std
+        y_scaled = (y_values - y_mean) / y_std
+
+        design_matrix = np.column_stack(
+            [
+                np.ones_like(x_scaled),
+                x_scaled,
+                y_scaled,
+            ]
+        )
+
+        weights = np.zeros(3, dtype=float)
+        learning_rate = 0.08
+        l2 = 0.01
+        iterations = 6000
+
+        for _ in range(iterations):
+            logits = design_matrix @ weights
+            probabilities = _sigmoid(logits)
+
+            gradient = design_matrix.T @ (probabilities - labels) / len(labels)
+
+            # Do not regularize intercept.
+            gradient[1:] += l2 * weights[1:]
+
+            weights -= learning_rate * gradient
+
+        w0, w1, w2 = weights
+
+        if abs(w2) < 1e-9:
+            raise ValueError("Fitted boundary is unstable because coefficient for N is too close to zero.")
+
+        # Convert boundary from standardized coordinates to original HR-N coordinates.
+        #
+        # z = w0 + w1*((HR-x_mean)/x_std) + w2*((N-y_mean)/y_std) = 0
+        #
+        # N = y_mean - (y_std / w2) * (w0 + w1*(HR-x_mean)/x_std)
+        # N = [-(y_std*w1)/(w2*x_std)] * HR + [y_mean - (y_std/w2)*w0 + (y_std*w1*x_mean)/(w2*x_std)]
+        slope = -(y_std * w1) / (w2 * x_std)
+        intercept = y_mean - (y_std / w2) * w0 + (y_std * w1 * x_mean) / (w2 * x_std)
+
+        predicted_probabilities = _sigmoid(design_matrix @ weights)
+        predictions = (predicted_probabilities >= 0.5).astype(float)
+        accuracy = float(np.mean(predictions == labels) * 100.0)
+
+        return slope, intercept, accuracy
+
+
+
     def export_png(self):
         rows = self.get_filtered_rows()
         points = self._prepare_points(rows)
 
-        if not points:
+        if not points and not self.show_boundary_var.get():
             messagebox.showinfo(
                 "No graph",
                 "There are no valid points to export.",
