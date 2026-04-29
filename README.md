@@ -176,8 +176,17 @@ The first goal is to build a clean and reliable Mathews–Potvin calculator with
 
 
 
-## License and disclaimer
+## License
 
-This project is licensed under the GNU General Public License.
+This project is proprietary software.
 
-This software is an auxiliary engineering calculation tool. See [DISCLAIMER.md](./DISCLAIMER.md) before using any results for engineering decisions.
+Use of this software is allowed only under a separate written license agreement or written permission from the author.
+
+See [LICENSE.txt](./LICENSE.txt) for details.
+
+## Disclaimer
+
+This software is an auxiliary engineering calculation tool. It does not replace professional engineering judgment or independent verification.
+
+See [DISCLAIMER.md](./DISCLAIMER.md) before using any results for engineering decisions.
+
