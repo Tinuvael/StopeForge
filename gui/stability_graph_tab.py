@@ -4,6 +4,12 @@ from tkinter import ttk, messagebox, filedialog
 import numpy as np
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 from matplotlib.figure import Figure
+from core.boundary_store import (
+    load_boundaries,
+    upsert_boundary,
+    delete_boundary,
+    DEFAULT_BOUNDARIES_PATH,
+)
 
 ALL_VALUE = "All"
 
@@ -93,6 +99,9 @@ class StabilityGraphTab(ttk.Frame):
         self.boundary_slope_var = tk.StringVar(value="1.0")
         self.boundary_intercept_var = tk.StringVar(value="0.0")
         self.envelope_margin_var =  tk.StringVar(value="10")
+        self.saved_boundary_var = tk.StringVar(value="")
+        self.boundary_comment_var = tk.StringVar(value="")
+        self.saved_boundaries: list[dict] = []
         self.envelope_percentile_var = tk.StringVar(value="85")
         self.visible_stats_var = tk.StringVar(value="Visible cases: no data")
 
@@ -107,7 +116,9 @@ class StabilityGraphTab(ttk.Frame):
         self._build_local_boundary_controls(container)
         self._build_graph(container)
         self.refresh_filters()
+        self.refresh_saved_boundaries()
         self.refresh_graph()
+
 
     def _build_title_bar(self, parent):
         title_frame = ttk.Frame(parent)
@@ -314,6 +325,48 @@ class StabilityGraphTab(ttk.Frame):
             textvariable=self.visible_stats_var,
             foreground="#555555",
         ).grid(row=1, column=5, columnspan=6, padx=6, pady=(0, 6), sticky="w")
+
+        ttk.Label(
+            boundary_frame,
+            text="Saved boundary",
+        ).grid(row=2, column=0, padx=6, pady=6, sticky="w")
+
+        self.saved_boundary_combo = ttk.Combobox(
+            boundary_frame,
+            textvariable=self.saved_boundary_var,
+            state="readonly",
+            width=40,
+        )
+        self.saved_boundary_combo.grid(row=2, column=1, columnspan=3, padx=6, pady=6, sticky="w")
+
+        ttk.Button(
+            boundary_frame,
+            text="Load boundary",
+            command=self.load_selected_boundary,
+        ).grid(row=2, column=4, padx=6, pady=6)
+
+        ttk.Button(
+            boundary_frame,
+            text="Save boundary",
+            command=self.save_current_boundary,
+        ).grid(row=2, column=5, padx=6, pady=6)
+
+        ttk.Button(
+            boundary_frame,
+            text="Delete boundary",
+            command=self.delete_selected_boundary,
+        ).grid(row=2, column=6, padx=6, pady=6)
+
+        ttk.Label(
+            boundary_frame,
+            text="Comment",
+        ).grid(row=2, column=7, padx=6, pady=6, sticky="w")
+
+        ttk.Entry(
+            boundary_frame,
+            textvariable=self.boundary_comment_var,
+            width=35,
+        ).grid(row=2, column=8, columnspan=4, padx=6, pady=6, sticky="w")
 
 
     def _build_graph(self, parent):
@@ -921,6 +974,170 @@ class StabilityGraphTab(ttk.Frame):
             support_y.append(selected_y)
 
         return np.array(support_x, dtype=float), np.array(support_y, dtype=float)
+
+    def _get_current_filter_value(self, var: tk.StringVar) -> str:
+        value = var.get().strip()
+        return "" if value == ALL_VALUE else value
+
+
+    def _make_boundary_display_name(self, row: dict) -> str:
+        project = row.get("project", "") or "All projects"
+        domain = row.get("domain", "") or "All domains"
+        surface = row.get("surface", "") or "All surfaces"
+        name = row.get("boundary_name", "") or "Unnamed boundary"
+
+        return f"{project} | {domain} | {surface} | {name}"
+
+
+    def refresh_saved_boundaries(self):
+        self.saved_boundaries = load_boundaries(DEFAULT_BOUNDARIES_PATH)
+
+        display_values = [
+            self._make_boundary_display_name(row)
+            for row in self.saved_boundaries
+        ]
+
+        self.saved_boundary_combo["values"] = display_values
+
+        if display_values and self.saved_boundary_var.get() not in display_values:
+            self.saved_boundary_var.set(display_values[0])
+
+        if not display_values:
+            self.saved_boundary_var.set("")
+
+
+    def _get_selected_boundary_row(self) -> dict | None:
+        selected_display_name = self.saved_boundary_var.get()
+
+        if not selected_display_name:
+            return None
+
+        for row in self.saved_boundaries:
+            if self._make_boundary_display_name(row) == selected_display_name:
+                return row
+
+        return None
+
+
+    def save_current_boundary(self):
+        slope = _safe_float(self.boundary_slope_var.get())
+        intercept = _safe_float(self.boundary_intercept_var.get())
+        percentile = _safe_float(self.envelope_percentile_var.get()) if hasattr(self, "envelope_percentile_var") else ""
+        margin = _safe_float(self.envelope_margin_var.get())
+
+        if slope is None or intercept is None:
+            messagebox.showerror(
+                "Save boundary error",
+                "Boundary slope and intercept must be valid numbers.",
+            )
+            return
+
+        boundary_name = self.boundary_name_var.get().strip()
+
+        if not boundary_name:
+            messagebox.showerror(
+                "Save boundary error",
+                "Boundary name cannot be empty.",
+            )
+            return
+
+        row = {
+            "project": self._get_current_filter_value(self.project_filter_var),
+            "domain": self._get_current_filter_value(self.domain_filter_var),
+            "surface": self._get_current_filter_value(self.surface_filter_var),
+            "boundary_name": boundary_name,
+            "mode": "linear",
+            "slope": slope,
+            "intercept": intercept,
+            "percentile": "" if percentile is None else percentile,
+            "margin": "" if margin is None else margin,
+            "comment": self.boundary_comment_var.get().strip(),
+        }
+
+        upsert_boundary(row, DEFAULT_BOUNDARIES_PATH)
+        self.refresh_saved_boundaries()
+
+        display_name = self._make_boundary_display_name(row)
+        self.saved_boundary_var.set(display_name)
+
+        messagebox.showinfo(
+            "Boundary saved",
+            f"Boundary was saved to:\n{DEFAULT_BOUNDARIES_PATH}",
+        )
+
+
+    def load_selected_boundary(self):
+        row = self._get_selected_boundary_row()
+
+        if row is None:
+            messagebox.showinfo(
+                "No boundary selected",
+                "Select a saved boundary first.",
+            )
+            return
+
+        project = row.get("project", "")
+        domain = row.get("domain", "")
+        surface = row.get("surface", "")
+
+        if project:
+            self.project_filter_var.set(project)
+        else:
+            self.project_filter_var.set(ALL_VALUE)
+
+        if domain:
+            self.domain_filter_var.set(domain)
+        else:
+            self.domain_filter_var.set(ALL_VALUE)
+
+        if surface:
+            self.surface_filter_var.set(surface)
+        else:
+            self.surface_filter_var.set(ALL_VALUE)
+
+        self.boundary_name_var.set(row.get("boundary_name", "Local boundary"))
+        self.boundary_slope_var.set(str(row.get("slope", "1.0")))
+        self.boundary_intercept_var.set(str(row.get("intercept", "0.0")))
+
+        if row.get("margin", "") != "":
+            self.envelope_margin_var.set(str(row.get("margin", "")))
+
+        if hasattr(self, "envelope_percentile_var") and row.get("percentile", "") != "":
+            self.envelope_percentile_var.set(str(row.get("percentile", "")))
+
+        self.boundary_comment_var.set(row.get("comment", ""))
+        self.boundary_preset_var.set("Manual")
+        self.show_boundary_var.set(True)
+
+        self.refresh_filters()
+        self.refresh_graph()
+
+
+    def delete_selected_boundary(self):
+        row = self._get_selected_boundary_row()
+
+        if row is None:
+            messagebox.showinfo(
+                "No boundary selected",
+                "Select a saved boundary first.",
+            )
+            return
+
+        answer = messagebox.askyesno(
+            "Delete boundary",
+            f"Delete saved boundary?\n\n{self._make_boundary_display_name(row)}",
+        )
+
+        if not answer:
+            return
+
+        delete_boundary(row, DEFAULT_BOUNDARIES_PATH)
+        self.refresh_saved_boundaries()
+
+        messagebox.showinfo(
+            "Boundary deleted",
+            "Saved boundary was deleted.",
+        )
 
 
     def export_png(self):
