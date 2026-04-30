@@ -92,6 +92,8 @@ class StabilityGraphTab(ttk.Frame):
         self.boundary_name_var = tk.StringVar(value="Local boundary")
         self.boundary_slope_var = tk.StringVar(value="1.0")
         self.boundary_intercept_var = tk.StringVar(value="0.0")
+        self.envelope_margin_var =  tk.StringVar(value="10")
+        self.envelope_percentile_var = tk.StringVar(value="85")
         self.visible_stats_var = tk.StringVar(value="Visible cases: no data")
 
         self._build_ui()
@@ -271,6 +273,34 @@ class StabilityGraphTab(ttk.Frame):
             text="Fit boundary from visible points",
             command=self.fit_boundary_from_visible_points,
         ).grid(row=0, column=10, padx=6, pady=6)
+
+        ttk.Label(
+            boundary_frame,
+            text="Envelope margin, %",
+        ).grid(row=0, column=11, padx=6, pady=6, sticky="w")
+
+        ttk.Label(
+            boundary_frame,
+            text="Envelope percentile, %",
+        ).grid(row=1, column=11, padx=6, pady=6, sticky="w")
+
+        ttk.Entry(
+            boundary_frame,
+            textvariable=self.envelope_percentile_var,
+            width=8,
+        ).grid(row=1, column=12, padx=6, pady=6, sticky="w")
+
+        ttk.Entry(
+            boundary_frame,
+            textvariable=self.envelope_margin_var,
+            width=8,
+        ).grid(row=0, column=12, padx=6, pady=6, sticky="w")
+
+        ttk.Button(
+            boundary_frame,
+            text="Fit unsafe upper envelope",
+            command=self.fit_unsafe_upper_envelope,
+        ).grid(row=0, column=13, padx=6, pady=6)
 
 
         ttk.Label(
@@ -612,6 +642,7 @@ class StabilityGraphTab(ttk.Frame):
             self.boundary_intercept_var.set(f"{intercept:.6g}")
             self.show_boundary_var.set(True)
             self.boundary_preset_var.set("Manual")
+            self.envelope_margin_var = tk.StringVar(value="10")
 
             self.refresh_graph()
 
@@ -709,6 +740,187 @@ class StabilityGraphTab(ttk.Frame):
 
         return slope, intercept, accuracy
 
+    def fit_unsafe_upper_envelope(self):
+        rows = self.get_filtered_rows()
+        points = self._prepare_points(rows)
+
+        unsafe_points = [
+            point for point in points
+            if point["observed_state"] in ("Unstable", "Caved")
+        ]
+
+        if len(unsafe_points) < 3:
+            messagebox.showerror(
+                "Cannot fit envelope",
+                "Need at least 3 Unstable/Caved points in the visible filtered dataset.",
+            )
+            return
+
+        margin_percent = _safe_float(self.envelope_margin_var.get())
+
+        percentile = _safe_float(self.envelope_percentile_var.get())
+
+        if margin_percent is None:
+            messagebox.showerror(
+                "Envelope error",
+                "Envelope margin must be a valid number.",
+            )
+            return
+
+        if margin_percent < 0:
+            messagebox.showerror(
+                "Envelope error",
+                "Envelope margin must be greater than or equal to zero.",
+            )
+            return
+
+        if percentile is None:
+            messagebox.showerror(
+                "Envelope error",
+                "Envelope percentile must be a valid number.",
+            )
+            return
+
+        if percentile <= 0 or percentile > 100:
+            messagebox.showerror(
+                "Envelope error",
+                "Envelope percentile must be between 1 and 100.",
+            )
+            return
+
+        try:
+            slope, intercept, used_points_count = self._fit_unsafe_upper_envelope_linear(
+        unsafe_points=unsafe_points,
+        margin_percent=margin_percent,
+        percentile=percentile,
+)
+
+            self.boundary_name_var.set("Unsafe upper envelope")
+            self.boundary_slope_var.set(f"{slope:.6g}")
+            self.boundary_intercept_var.set(f"{intercept:.6g}")
+            self.show_boundary_var.set(True)
+            self.boundary_preset_var.set("Manual")
+
+            self.refresh_graph()
+
+            messagebox.showinfo(
+                "Envelope fitted",
+                "Unsafe upper envelope fitted:\n\n"
+                f"N = {slope:.6g} × HR + {intercept:.6g}\n\n"
+                f"Unstable/Caved points: {len(unsafe_points)}\n"
+                f"Upper-envelope support points: {used_points_count}\n"
+                f"Margin: {margin_percent:.1f}%\n\n"
+                f"Percentile: {percentile:.1f}%\n"
+                "This is a conservative engineering boundary. Check it visually before using it as a design criterion.",
+            )
+
+        except Exception as error:
+            messagebox.showerror("Envelope fit error", str(error))
+
+
+    def _fit_unsafe_upper_envelope_linear(
+        self,
+        unsafe_points: list[dict],
+        margin_percent: float,
+        percentile: float,
+    ) -> tuple[float, float, int]:
+        """
+        Fit a practical upper envelope for unsafe cases.
+
+        Instead of forcing the boundary above every single Unstable/Caved point,
+        this uses percentile points in HR bins. This avoids one high outlier
+        pushing the whole boundary too far upward.
+
+        Boundary:
+            N = a * HR + b
+        """
+        x_values = np.array([point["hr"] for point in unsafe_points], dtype=float)
+        y_values = np.array([point["n"] for point in unsafe_points], dtype=float)
+
+        valid_mask = (x_values > 0) & (y_values > 0)
+        x_values = x_values[valid_mask]
+        y_values = y_values[valid_mask]
+
+        if len(x_values) < 3:
+            raise ValueError("Need at least 3 valid unsafe points with HR > 0 and N > 0.")
+
+        support_x, support_y = self._get_percentile_bin_points(
+            x_values=x_values,
+            y_values=y_values,
+            percentile=percentile,
+        )
+
+        if len(support_x) < 2:
+            raise ValueError("Could not build enough envelope support points.")
+
+        slope, intercept = np.polyfit(support_x, support_y, 1)
+
+        # Apply engineering margin directly to envelope support points.
+        # This makes margin behavior clear and visible:
+        # margin = 10 means N_boundary is raised by 10%.
+        margin_multiplier = 1.0 + margin_percent / 100.0
+        support_y = support_y * margin_multiplier
+
+        slope, intercept = np.polyfit(support_x, support_y, 1)
+
+        return float(slope), float(intercept), len(support_x)
+
+
+
+    def _get_percentile_bin_points(
+        self,
+        x_values: np.ndarray,
+        y_values: np.ndarray,
+        percentile: float,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """
+        Build envelope support points.
+
+        For each HR bin, take the selected percentile of N instead of maximum N.
+        This is more stable than a strict upper envelope.
+        """
+        point_count = len(x_values)
+
+        if point_count < 6:
+            return x_values, y_values
+
+        bin_count = min(6, max(3, int(np.sqrt(point_count))))
+
+        x_min = float(np.min(x_values))
+        x_max = float(np.max(x_values))
+
+        if x_min == x_max:
+            return x_values, y_values
+
+        bins = np.linspace(x_min, x_max, bin_count + 1)
+
+        support_x = []
+        support_y = []
+
+        for i in range(bin_count):
+            left = bins[i]
+            right = bins[i + 1]
+
+            if i == bin_count - 1:
+                mask = (x_values >= left) & (x_values <= right)
+            else:
+                mask = (x_values >= left) & (x_values < right)
+
+            if not np.any(mask):
+                continue
+
+            bin_x = x_values[mask]
+            bin_y = y_values[mask]
+
+            selected_y = float(np.percentile(bin_y, percentile))
+
+            # X берём как медиану HR в бине, чтобы линия не прыгала по крайним точкам.
+            selected_x = float(np.median(bin_x))
+
+            support_x.append(selected_x)
+            support_y.append(selected_y)
+
+        return np.array(support_x, dtype=float), np.array(support_y, dtype=float)
 
 
     def export_png(self):
