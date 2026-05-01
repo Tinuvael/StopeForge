@@ -89,30 +89,28 @@ def calculate_delta_dip(
 def calculate_joint_orientation_factor_b(
     surface_dip_deg: float,
     surface_dip_direction_deg: float,
-    joint_sets: list[JointSet],
+    joint_sets: list,
 ) -> float:
     """
-    Calculate joint orientation adjustment factor B.
-
-    This implementation is transferred from the previous FjordUG prototype.
-    The lowest B value from all defined joint sets is used as the critical value.
+    Calculate B using true interplane angle between stope surface
+    and each joint set. The lowest B is critical.
     """
     b_values = []
 
     for joint_set in joint_sets:
-        delta_az_raw = abs(joint_set.dip_direction_deg - surface_dip_direction_deg)
-        delta_az = 360 - delta_az_raw if delta_az_raw > 180 else delta_az_raw
-        delta_az = min(delta_az, 180 - delta_az)
-
-        delta_dip = calculate_delta_dip(
-            joint_dip_deg=joint_set.dip_deg,
-            surface_dip_deg=surface_dip_deg,
-            delta_az_raw_deg=delta_az_raw,
+        true_angle = calculate_true_interplane_angle_deg(
+            plane_1_dip_deg=surface_dip_deg,
+            plane_1_dip_direction_deg=surface_dip_direction_deg,
+            plane_2_dip_deg=joint_set.dip_deg,
+            plane_2_dip_direction_deg=joint_set.dip_direction_deg,
         )
 
-        b_values.append(calculate_b_intermediate(delta_az, delta_dip))
+        b_values.append(calculate_b_from_true_interplane_angle(true_angle))
 
-    return min(b_values) if b_values else 0.2
+    if not b_values:
+        return 1.0
+
+    return min(b_values)
 
 
 def calculate_stress_factor_a(
@@ -174,3 +172,68 @@ def calculate_surface_orientation_factor_c(dip_from_horizontal_deg: float) -> fl
         raise ValueError("Surface dip must be between 0 and 90 degrees.")
 
     return 8 - 6 * math.cos(math.radians(dip_from_horizontal_deg))
+
+
+def calculate_true_interplane_angle_deg(
+    plane_1_dip_deg: float,
+    plane_1_dip_direction_deg: float,
+    plane_2_dip_deg: float,
+    plane_2_dip_direction_deg: float,
+) -> float:
+    """
+    True interplane angle between two planes using their poles.
+
+    Input:
+    - dip and dip direction for plane 1
+    - dip and dip direction for plane 2
+
+    Output:
+    - smallest angle between the two planes, degrees, range 0–90
+    """
+
+    def pole_vector(dip_deg: float, dip_direction_deg: float):
+        trend_deg = (dip_direction_deg + 180.0) % 360.0
+        plunge_deg = 90.0 - dip_deg
+
+        trend_rad = math.radians(trend_deg)
+        plunge_rad = math.radians(plunge_deg)
+
+        north = math.cos(trend_rad) * math.cos(plunge_rad)
+        east = math.sin(trend_rad) * math.cos(plunge_rad)
+        down = math.sin(plunge_rad)
+
+        return north, east, down
+
+    n1, e1, d1 = pole_vector(plane_1_dip_deg, plane_1_dip_direction_deg)
+    n2, e2, d2 = pole_vector(plane_2_dip_deg, plane_2_dip_direction_deg)
+
+    dot_product = n1 * n2 + e1 * e2 + d1 * d2
+
+    # Plane poles can be opposite while describing the same plane.
+    # abs() gives the smallest angle between planes.
+    dot_product = abs(dot_product)
+    dot_product = max(-1.0, min(1.0, dot_product))
+
+    return math.degrees(math.acos(dot_product))
+
+
+def calculate_b_from_true_interplane_angle(angle_deg: float) -> float:
+    """
+    Approximation of Potvin B factor from true interplane angle.
+
+    Worst orientation is shallow-oblique, around 10–30 degrees.
+    Perpendicular joints approach B = 1.0.
+    """
+    if angle_deg < 0 or angle_deg > 90:
+        raise ValueError("True interplane angle must be between 0 and 90 degrees.")
+
+    if angle_deg <= 10:
+        return 0.3 - 0.01 * angle_deg
+
+    if angle_deg <= 30:
+        return 0.2
+
+    if angle_deg <= 60:
+        return -0.4 + 0.02 * angle_deg
+
+    return 0.4 + angle_deg / 150.0

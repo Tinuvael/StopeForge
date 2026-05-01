@@ -46,6 +46,7 @@ class SurfaceInput:
     surface_type: SurfaceType
     dip_deg: float
     q_prime: float
+    stress_factor_a: float | None = None
 
 
 @dataclass
@@ -70,6 +71,11 @@ class SurfaceResult:
 
     stability_state: StabilityState
 
+    actual_hr_m: float | None = None
+    local_state: StabilityState | None = None
+    local_boundary_name: str | None = None
+    local_boundary_n: float | None = None
+
 
 @dataclass
 class StopeResult:
@@ -77,3 +83,5 @@ class StopeResult:
     surfaces: list[SurfaceResult]
     limiting_surface: SurfaceType
     final_state: StabilityState
+    calculation_mode: str = "Standard"
+    local_final_state: StabilityState | None = None

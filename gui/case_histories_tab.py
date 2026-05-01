@@ -3,12 +3,18 @@ from tkinter import ttk, messagebox, filedialog
 from pathlib import Path
 from core.case_import import import_case_histories_from_excel
 
-from core.case_store import (
-    load_cases,
-    save_cases,
-    create_empty_cases_file,
-    DEFAULT_CASES_PATH,
+from db.connection import DEFAULT_PROJECT_DB_PATH
+from db.schema import initialize_database
+from db.case_repository import (
+    create_case,
+    create_cases,
+    list_cases,
+    update_case,
+    delete_case,
+    delete_all_cases,
 )
+
+
 from core.export_excel import export_project_overview_to_excel
 from core.models import SurfaceType, StopeResult
 
@@ -58,7 +64,8 @@ class CaseHistoriesTab(ttk.Frame):
     def __init__(self, parent):
         super().__init__(parent)
 
-        self.database_path = Path(DEFAULT_CASES_PATH)
+        self.database_path = Path(DEFAULT_PROJECT_DB_PATH)
+        initialize_database(self.database_path)
         self.rows: list[dict] = []
         self.filtered_rows: list[dict] = []
         self.selected_item_id = None
@@ -111,12 +118,12 @@ class CaseHistoriesTab(ttk.Frame):
         ).pack(side="right", padx=(0, 8))
 
     def _build_database_bar(self, parent):
-        database_frame = ttk.LabelFrame(parent, text="Case history database")
+        database_frame = ttk.LabelFrame(parent, text="SQLite project database")
         database_frame.pack(fill="x", pady=(0, 8))
 
         self.database_path_var = tk.StringVar(value=str(self.database_path))
 
-        ttk.Label(database_frame, text="Current file").grid(
+        ttk.Label(database_frame, text="Current SQLite file").grid(
             row=0,
             column=0,
             padx=6,
@@ -133,23 +140,18 @@ class CaseHistoriesTab(ttk.Frame):
 
         ttk.Button(
             database_frame,
-            text="New database",
-            command=self.new_database,
+            text="Reload from SQLite",
+            command=self.load_from_database,
         ).grid(row=0, column=2, padx=6, pady=6)
 
         ttk.Button(
             database_frame,
-            text="Load database",
-            command=self.load_database_as,
+            text="Clear all cases",
+            command=self.clear_all_cases,
         ).grid(row=0, column=3, padx=6, pady=6)
 
-        ttk.Button(
-            database_frame,
-            text="Save as...",
-            command=self.save_database_as,
-        ).grid(row=0, column=4, padx=6, pady=6)
-
         database_frame.columnconfigure(1, weight=1)
+
 
     def _build_filters(self, parent):
         filter_frame = ttk.LabelFrame(parent, text="Filters")
@@ -376,10 +378,9 @@ class CaseHistoriesTab(ttk.Frame):
 
             new_rows.append(row)
 
-        self.rows.extend(new_rows)
-        self.update_filter_values()
-        self.apply_filters()
-        self.save_database()
+        create_cases(new_rows, self.database_path)
+        self.load_from_database()
+
 
         messagebox.showinfo(
             "Saved",
@@ -515,9 +516,20 @@ class CaseHistoriesTab(ttk.Frame):
                 selected_row["observed_state"] = observed_state
                 selected_row["comment"] = comment
 
-        self.update_filter_values()
-        self.apply_filters()
-        self.save_database()
+                case_id = selected_row.get("id")
+                if case_id is not None:
+                    update_case(
+                        int(case_id),
+                        {
+                            "observed_state": observed_state,
+                            "comment": comment,
+                        },
+                        self.database_path,
+                    )
+
+                
+
+        self.load_from_database()
 
     def delete_selected(self):
         selection = self.tree.selection()
@@ -544,76 +556,49 @@ class CaseHistoriesTab(ttk.Frame):
 
         self.rows = [row for row in self.rows if row not in rows_to_delete]
 
-        self.update_filter_values()
-        self.apply_filters()
-        self.save_database()
+        for row in rows_to_delete:
+            case_id = row.get("id")
+            if case_id is not None:
+                delete_case(int(case_id), self.database_path)
 
-    def load_from_database(self):
-        self.rows = load_cases(self.database_path)
-        self.update_filter_values()
-        self.apply_filters()
-
-    def save_database(self):
-        save_cases(self.rows, self.database_path)
-        self.database_path_var.set(str(self.database_path))
-        self.summary_var.set(
-            f"Shown: {len(self.filtered_rows)} / Total: {len(self.rows)} | Saved to: {self.database_path}"
-        )
-
-    def new_database(self):
-        output_path = filedialog.asksaveasfilename(
-            title="Create new case history database",
-            defaultextension=".csv",
-            filetypes=[("CSV database", "*.csv")],
-            initialfile="case_histories.csv",
-        )
-
-        if not output_path:
-            return
-
-        answer = messagebox.askyesno(
-            "Create new database",
-            "Create a new empty case history database?\n\n"
-            "Unsaved changes in the current database should be saved first.",
-        )
-
-        if not answer:
-            return
-
-        self.database_path = create_empty_cases_file(output_path)
-        self.rows = []
-        self.reset_filters()
-        self.update_filter_values()
-        self.database_path_var.set(str(self.database_path))
-        self.save_database()
-
-    def load_database_as(self):
-        input_path = filedialog.askopenfilename(
-            title="Load case history database",
-            filetypes=[("CSV database", "*.csv"), ("All files", "*.*")],
-        )
-
-        if not input_path:
-            return
-
-        self.database_path = Path(input_path)
-        self.database_path_var.set(str(self.database_path))
         self.load_from_database()
 
-    def save_database_as(self):
-        output_path = filedialog.asksaveasfilename(
-            title="Save case history database as",
-            defaultextension=".csv",
-            filetypes=[("CSV database", "*.csv")],
-            initialfile=Path(self.database_path).name,
+
+    def load_from_database(self):
+        self.rows = list_cases(self.database_path)
+        self.database_path_var.set(str(self.database_path))
+        self.update_filter_values()
+        self.apply_filters()
+
+
+    def save_database(self):
+        self.database_path_var.set(str(self.database_path))
+        self.summary_var.set(
+            f"Shown: {len(self.filtered_rows)} / Total: {len(self.rows)} | SQLite: {self.database_path}"
         )
 
-        if not output_path:
-            return
 
-        self.database_path = Path(output_path)
-        self.database_path_var.set(str(self.database_path))
-        self.save_database()
+    def new_database(self):
+        messagebox.showinfo(
+            "SQLite mode",
+            "Case histories are now stored in the SQLite project database.",
+        )
+
+
+    def load_database_as(self):
+        messagebox.showinfo(
+            "SQLite mode",
+            "Loading separate CSV databases is disabled in SQLite mode.",
+        )
+
+
+    def save_database_as(self):
+        messagebox.showinfo(
+            "SQLite mode",
+            "Saving separate CSV databases is disabled in SQLite mode.",
+        )
+
+
 
     def export_to_excel(self):
         rows_to_export = self.get_filtered_rows()
@@ -690,10 +675,9 @@ class CaseHistoriesTab(ttk.Frame):
             if not answer:
                 return
 
-            self.rows.extend(imported_rows)
-            self.update_filter_values()
-            self.apply_filters()
-            self.save_database()
+            create_cases(imported_rows, self.database_path)
+            self.load_from_database()
+
 
             messagebox.showinfo(
                 "Import complete",
@@ -702,3 +686,21 @@ class CaseHistoriesTab(ttk.Frame):
 
         except Exception as error:
             messagebox.showerror("Import error", str(error))
+
+    def clear_all_cases(self):
+        answer = messagebox.askyesno(
+            "Clear all cases",
+            "Delete ALL case histories from the SQLite database?\n\n"
+            "This cannot be undone.",
+        )
+
+        if not answer:
+            return
+
+        delete_all_cases(self.database_path)
+        self.load_from_database()
+
+        messagebox.showinfo(
+            "Cases deleted",
+            "All case histories were deleted from the SQLite database.",
+        )
