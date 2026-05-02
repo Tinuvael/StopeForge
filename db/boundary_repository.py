@@ -25,11 +25,19 @@ BOUNDARY_FIELDS = [
 def _normalize_row(row: dict[str, Any]) -> dict[str, Any]:
     clean_row = {field: row.get(field, None) for field in BOUNDARY_FIELDS}
 
-    if clean_row["boundary_type"] in (None, ""):
-        clean_row["boundary_type"] = "Stable-Unstable"
+    text_defaults = {
+        "project": "",
+        "domain": "",
+        "surface": "",
+        "boundary_name": "",
+        "boundary_type": "Stable-Unstable",
+        "mode": "linear",
+        "comment": "",
+    }
 
-    if clean_row["mode"] in (None, ""):
-        clean_row["mode"] = "linear"
+    for field, default_value in text_defaults.items():
+        if clean_row.get(field) in (None, ""):
+            clean_row[field] = default_value
 
     if clean_row["is_standard"] in (None, ""):
         clean_row["is_standard"] = 0
@@ -38,6 +46,7 @@ def _normalize_row(row: dict[str, Any]) -> dict[str, Any]:
         clean_row["is_active"] = 1
 
     return clean_row
+
 
 
 def upsert_boundary(row: dict[str, Any], db_path: str | Path = DEFAULT_PROJECT_DB_PATH) -> int:
