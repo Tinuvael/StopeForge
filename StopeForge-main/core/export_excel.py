@@ -101,7 +101,7 @@ def export_current_calculation_to_excel(
     ws.column_dimensions["F"].width = 16
     ws.column_dimensions["G"].width = 16
 
-    for row in range(1, 45):
+    for row in range(1, 35):
         ws.row_dimensions[row].height = 22
 
     stope = result.stope
@@ -198,15 +198,9 @@ def export_current_calculation_to_excel(
         ("B, joint orientation factor", "joint_factor_b"),
         ("C, surface orientation factor", "surface_factor_c"),
         ("N, stability number", "stability_number_n"),
-        ("Actual HR", "actual_hr_m"),
         ("HR, stable hydraulic radius", "hr_stable"),
-        ("HR, caving hydraulic radius", "hr_caving"),
-        ("Standard assessment", "stability_state"),
-        ("Local assessment", "local_state"),
-        ("Local boundary", "local_boundary_name"),
-        ("Boundary N", "local_boundary_n"),
+        ("Geomechanical assessment", "stability_state"),
     ]
-
 
     first_data_row = 19
 
@@ -221,17 +215,14 @@ def export_current_calculation_to_excel(
                 ws.cell(row=row_idx, column=col_idx).value = None
                 continue
 
-            value = getattr(surface, attr, None)
+            value = getattr(surface, attr)
 
-            if attr in ("stability_state", "local_state"):
-                value = "" if value is None else value.value
+            if attr == "stability_state":
+                value = value.value
             elif isinstance(value, float):
                 value = _fmt(value, 2)
-            elif value is None:
-                value = ""
 
             ws.cell(row=row_idx, column=col_idx).value = _safe_value(value)
-
 
     last_assessment_row = first_data_row + len(parameter_rows) - 1
 
@@ -245,19 +236,13 @@ def export_current_calculation_to_excel(
             cell.font = Font(name="Times New Roman", size=11)
             cell.alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
 
-    # Color Standard / Local assessment rows
-    for row_idx, (label, attr) in enumerate(parameter_rows, start=first_data_row):
-        if attr not in ("stability_state", "local_state"):
-            continue
-
-        for col in range(4, 8):
-            cell = ws.cell(row=row_idx, column=col)
-
-            if cell.value:
-                cell.fill = _state_fill(str(cell.value))
-                cell.font = Font(name="Times New Roman", size=11, bold=True)
-                cell.alignment = Alignment(horizontal="center", vertical="center")
-
+    # Color assessment row
+    assessment_row = last_assessment_row
+    for col in range(4, 8):
+        cell = ws.cell(row=assessment_row, column=col)
+        cell.fill = _state_fill(str(cell.value))
+        cell.font = Font(name="Times New Roman", size=11, bold=True)
+        cell.alignment = Alignment(horizontal="center", vertical="center")
 
     # ------------------------------------------------------------------
     # Summary
@@ -265,45 +250,19 @@ def export_current_calculation_to_excel(
     summary_row = last_assessment_row + 1
     _merge_title(ws, f"A{summary_row}:G{summary_row}", "Summary")
 
-    calculation_mode = getattr(result, "calculation_mode", "Standard")
-    local_final_state = getattr(result, "local_final_state", None)
+    ws[f"A{summary_row + 1}"] = "Final state"
+    ws.merge_cells(start_row=summary_row + 1, start_column=2, end_row=summary_row + 1, end_column=3)
+    ws[f"B{summary_row + 1}"] = result.final_state.value
 
-    summary_items = [
-        ("Calculation mode", calculation_mode),
-        ("Standard final state", result.final_state.value),
-        (
-            "Local final state",
-            "" if local_final_state is None else local_final_state.value,
-        ),
-        ("Limiting surface", result.limiting_surface.value),
-    ]
+    ws[f"A{summary_row + 2}"] = "Limiting surface"
+    ws.merge_cells(start_row=summary_row + 2, start_column=2, end_row=summary_row + 2, end_column=3)
+    ws[f"B{summary_row + 2}"] = result.limiting_surface.value
 
-    for offset, (label, value) in enumerate(summary_items, start=1):
-        row_idx = summary_row + offset
+    _style_range(ws, f"A{summary_row + 1}:G{summary_row + 2}", align_center=False)
 
-        ws[f"A{row_idx}"] = label
-        ws.merge_cells(
-            start_row=row_idx,
-            start_column=2,
-            end_row=row_idx,
-            end_column=3,
-        )
-        ws[f"B{row_idx}"] = value
-
-    last_summary_row = summary_row + len(summary_items)
-
-    _style_range(ws, f"A{summary_row + 1}:G{last_summary_row}", align_center=False)
-
-    # Color final state cells
-    ws[f"B{summary_row + 2}"].fill = _state_fill(result.final_state.value)
-    ws[f"B{summary_row + 2}"].font = Font(name="Times New Roman", size=11, bold=True)
-    ws[f"B{summary_row + 2}"].alignment = Alignment(horizontal="center", vertical="center")
-
-    if local_final_state is not None:
-        ws[f"B{summary_row + 3}"].fill = _state_fill(local_final_state.value)
-        ws[f"B{summary_row + 3}"].font = Font(name="Times New Roman", size=11, bold=True)
-        ws[f"B{summary_row + 3}"].alignment = Alignment(horizontal="center", vertical="center")
-
+    ws[f"B{summary_row + 1}"].fill = _state_fill(result.final_state.value)
+    ws[f"B{summary_row + 1}"].font = Font(name="Times New Roman", size=11, bold=True)
+    ws[f"B{summary_row + 1}"].alignment = Alignment(horizontal="center", vertical="center")
 
     ws.freeze_panes = "A18"
     ws.sheet_view.showGridLines = False
@@ -321,25 +280,18 @@ def export_project_overview_to_excel(
     ws.title = "Project Overview"
 
     headers = [
-        "Surface",
-        "Dip, °",
-        "Q'",
-        "A",
-        "B",
-        "C",
-        "N",
-        "Actual HR",
-        "HR stable",
-        "HR caving",
-        "Stable span",
-        "Caving span",
-        "Rating length",
-        "Standard State",
-        "Local State",
-        "Local Boundary",
-        "Boundary N",
+        "Project",
+        "Domain",
+        "Stope ID",
+        "Depth, m",
+        "Height, m",
+        "Average dip, °",
+        "Width, m",
+        "Span, m",
+        "Limiting surface",
+        "Final state",
+        "Comment",
     ]
-
 
     ws.append(headers)
 

@@ -1,11 +1,5 @@
 import math
 
-from core.local_assessment import (
-    calculate_surface_hydraulic_radius,
-    assess_surface_local,
-)
-
-
 from core.mathews_factors import (
     calculate_joint_orientation_factor_b,
     calculate_stress_factor_a,
@@ -195,9 +189,7 @@ def calculate_stope_result(
     stope: StopeInput,
     surfaces: list[SurfaceInput],
     joint_sets: list[JointSet],
-    calculation_mode: str = "Standard",
 ) -> StopeResult:
-
     auto_stress_factor_a = calculate_stress_factor_a(
     depth_m=stope.depth_m,
     unit_weight_t_m3=stope.unit_weight_t_m3,
@@ -300,25 +292,6 @@ def calculate_stope_result(
             cave_length_m=cave_strike_length,
         )
 
-        actual_hr = calculate_surface_hydraulic_radius(
-            surface_type=surface.surface_type,
-            stope=stope,
-        )
-
-        local_state = None
-        local_boundary_name = None
-        local_boundary_n = None
-
-        if calculation_mode == "Compare":
-            local_state, local_boundary_name, local_boundary_n = assess_surface_local(
-                project=stope.project_name,
-                domain=stope.domain_name,
-                surface=surface.surface_type.value,
-                stability_number_n=stability_number_n,
-                hydraulic_radius=actual_hr,
-            )
-
-
         surface_results.append(
             SurfaceResult(
                 surface_type=surface.surface_type,
@@ -336,10 +309,6 @@ def calculate_stope_result(
                 cave_strike_length_m=cave_strike_length,
                 rating_length_m=rating_length,
                 stability_state=state,
-                actual_hr_m=actual_hr,
-                local_state=local_state,
-                local_boundary_name=local_boundary_name,
-                local_boundary_n=local_boundary_n,
             )
         )
 
@@ -360,23 +329,9 @@ def calculate_stope_result(
         ),
     )
 
-    local_final_state = None
-
-    if calculation_mode in ("Local", "Compare"):
-        local_states = [
-            result.local_state
-            for result in surface_results
-            if result.local_state is not None
-        ]
-
-        if local_states:
-            local_final_state = get_worst_state(local_states)
-
     return StopeResult(
         stope=stope,
         surfaces=surface_results,
         limiting_surface=limiting_surface_result.surface_type,
         final_state=final_state,
-        calculation_mode=calculation_mode,
-        local_final_state=local_final_state,
     )

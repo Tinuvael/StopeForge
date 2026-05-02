@@ -3,18 +3,12 @@ from tkinter import ttk, messagebox, filedialog
 from pathlib import Path
 from core.case_import import import_case_histories_from_excel
 
-from db.connection import DEFAULT_PROJECT_DB_PATH
-from db.schema import initialize_database
-from db.case_repository import (
-    create_case,
-    create_cases,
-    list_cases,
-    update_case,
-    delete_case,
-    delete_all_cases,
+from core.case_store import (
+    load_cases,
+    save_cases,
+    create_empty_cases_file,
+    DEFAULT_CASES_PATH,
 )
-
-
 from core.export_excel import export_project_overview_to_excel
 from core.models import SurfaceType, StopeResult
 
@@ -64,8 +58,7 @@ class CaseHistoriesTab(ttk.Frame):
     def __init__(self, parent):
         super().__init__(parent)
 
-        self.database_path = Path(DEFAULT_PROJECT_DB_PATH)
-        initialize_database(self.database_path)
+        self.database_path = Path(DEFAULT_CASES_PATH)
         self.rows: list[dict] = []
         self.filtered_rows: list[dict] = []
         self.selected_item_id = None
@@ -118,12 +111,12 @@ class CaseHistoriesTab(ttk.Frame):
         ).pack(side="right", padx=(0, 8))
 
     def _build_database_bar(self, parent):
-        database_frame = ttk.LabelFrame(parent, text="SQLite project database")
+        database_frame = ttk.LabelFrame(parent, text="Case history database")
         database_frame.pack(fill="x", pady=(0, 8))
 
         self.database_path_var = tk.StringVar(value=str(self.database_path))
 
-        ttk.Label(database_frame, text="Current SQLite file").grid(
+        ttk.Label(database_frame, text="Current file").grid(
             row=0,
             column=0,
             padx=6,
@@ -140,18 +133,23 @@ class CaseHistoriesTab(ttk.Frame):
 
         ttk.Button(
             database_frame,
-            text="Reload from SQLite",
-            command=self.load_from_database,
+            text="New database",
+            command=self.new_database,
         ).grid(row=0, column=2, padx=6, pady=6)
 
         ttk.Button(
             database_frame,
-            text="Clear all cases",
-            command=self.clear_all_cases,
+            text="Load database",
+            command=self.load_database_as,
         ).grid(row=0, column=3, padx=6, pady=6)
 
-        database_frame.columnconfigure(1, weight=1)
+        ttk.Button(
+            database_frame,
+            text="Save as...",
+            command=self.save_database_as,
+        ).grid(row=0, column=4, padx=6, pady=6)
 
+        database_frame.columnconfigure(1, weight=1)
 
     def _build_filters(self, parent):
         filter_frame = ttk.LabelFrame(parent, text="Filters")
@@ -271,16 +269,9 @@ class CaseHistoriesTab(ttk.Frame):
             "n",
             "hr",
             "predicted_state",
-            "calculation_mode",
-            "standard_state",
-            "local_state",
-            "local_boundary_name",
-            "local_boundary_n",
-            "actual_hr_m",
             "observed_state",
             "comment",
         )
-
 
         self.tree = ttk.Treeview(table_frame, columns=columns, show="headings", height=20)
 
@@ -301,16 +292,9 @@ class CaseHistoriesTab(ttk.Frame):
             "n": "N",
             "hr": "HR",
             "predicted_state": "Predicted",
-            "calculation_mode": "Mode",
-            "standard_state": "Standard",
-            "local_state": "Local",
-            "local_boundary_name": "Local Boundary",
-            "local_boundary_n": "Boundary N",
-            "actual_hr_m": "Actual HR",
             "observed_state": "Observed",
             "comment": "Comment",
         }
-
 
         widths = {
             "project": 120,
@@ -329,16 +313,9 @@ class CaseHistoriesTab(ttk.Frame):
             "n": 80,
             "hr": 80,
             "predicted_state": 110,
-            "calculation_mode": 90,
-            "standard_state": 100,
-            "local_state": 100,
-            "local_boundary_name": 180,
-            "local_boundary_n": 100,
-            "actual_hr_m": 90,
             "observed_state": 110,
-            "comment": 260,
+            "comment": 300,
         }
-
 
         for column in columns:
             self.tree.heading(column, text=headings[column])
@@ -370,65 +347,45 @@ class CaseHistoriesTab(ttk.Frame):
         ).pack(anchor="w", pady=(8, 0))
 
     def add_from_current_result(self, result: StopeResult, default_comment: str = ""):
-        
+        new_rows = []
 
-            new_rows = []
-            calculation_mode = getattr(result, "calculation_mode", "Standard")
+        for surface in result.surfaces:
+            hr = _calculate_shape_factor_hr(surface.surface_type, result.stope)
 
-            for surface in result.surfaces:
-                actual_hr = getattr(surface, "actual_hr_m", None)
+            row = {
+                "project": result.stope.project_name,
+                "domain": result.stope.domain_name,
+                "stope_id": result.stope.stope_id,
+                "surface": surface.surface_type.value,
+                "depth_m": result.stope.depth_m,
+                "height_m": result.stope.stope_height_m,
+                "avg_dip_deg": result.stope.average_dip_deg,
+                "width_m": result.stope.stope_width_m,
+                "span_m": result.stope.stope_span_m,
+                "q_prime": _safe_round(surface.q_prime, 3),
+                "a": _safe_round(surface.stress_factor_a, 3),
+                "b": _safe_round(surface.joint_factor_b, 3),
+                "c": _safe_round(surface.surface_factor_c, 3),
+                "n": _safe_round(surface.stability_number_n, 3),
+                "shape_factor_hr_m": _safe_round(hr, 3),
+                "stable_hr_limit_m": _safe_round(surface.hr_stable, 3),
+                "predicted_state": surface.stability_state.value,
+                "observed_state": "Unknown",
+                "comment": default_comment,
+            }
 
-                if actual_hr is None:
-                    actual_hr = _calculate_shape_factor_hr(surface.surface_type, result.stope)
+            new_rows.append(row)
 
-                local_state = getattr(surface, "local_state", None)
-                local_boundary_name = getattr(surface, "local_boundary_name", None)
-                local_boundary_n = getattr(surface, "local_boundary_n", None)
+        self.rows.extend(new_rows)
+        self.update_filter_values()
+        self.apply_filters()
+        self.save_database()
 
-                standard_state = surface.stability_state.value
-                local_state_value = "" if local_state is None else local_state.value
-
-                predicted_state = standard_state
-
-                row = {
-                    "project": result.stope.project_name,
-                    "domain": result.stope.domain_name,
-                    "stope_id": result.stope.stope_id,
-                    "surface": surface.surface_type.value,
-                    "depth_m": result.stope.depth_m,
-                    "height_m": result.stope.stope_height_m,
-                    "avg_dip_deg": result.stope.average_dip_deg,
-                    "width_m": result.stope.stope_width_m,
-                    "span_m": result.stope.stope_span_m,
-                    "q_prime": _safe_round(surface.q_prime, 3),
-                    "a": _safe_round(surface.stress_factor_a, 3),
-                    "b": _safe_round(surface.joint_factor_b, 3),
-                    "c": _safe_round(surface.surface_factor_c, 3),
-                    "n": _safe_round(surface.stability_number_n, 3),
-                    "shape_factor_hr_m": _safe_round(actual_hr, 3),
-                    "stable_hr_limit_m": _safe_round(surface.hr_stable, 3),
-                    "predicted_state": predicted_state,
-                    "calculation_mode": calculation_mode,
-                    "standard_state": standard_state,
-                    "local_state": local_state_value,
-                    "local_boundary_name": "" if local_boundary_name is None else local_boundary_name,
-                    "local_boundary_n": "" if local_boundary_n is None else _safe_round(local_boundary_n, 3),
-                    "actual_hr_m": _safe_round(actual_hr, 3),
-                    "observed_state": "Unknown",
-                    "comment": default_comment,
-                }
-
-                new_rows.append(row)
-
-            create_cases(new_rows, self.database_path)
-            self.load_from_database()
-
-            messagebox.showinfo(
-                "Saved",
-                "Current calculation was added to Case Histories.\n\n"
-                "Observed state is set to Unknown. Select rows and update it manually.",
-            )
-
+        messagebox.showinfo(
+            "Saved",
+            "Current calculation was added to Case Histories.\n\n"
+            "Observed state is set to Unknown. Select rows and update it manually.",
+        )
 
     def update_filter_values(self):
         projects = sorted({row.get("project", "") for row in self.rows if row.get("project", "")})
@@ -513,12 +470,6 @@ class CaseHistoriesTab(ttk.Frame):
                     row.get("n", ""),
                     row.get("shape_factor_hr_m", ""),
                     row.get("predicted_state", ""),
-                    row.get("calculation_mode", ""),
-                    row.get("standard_state", ""),
-                    row.get("local_state", ""),
-                    row.get("local_boundary_name", ""),
-                    row.get("local_boundary_n", ""),
-                    row.get("actual_hr_m", ""),
                     row.get("observed_state", "Unknown"),
                     row.get("comment", ""),
                 ),
@@ -527,7 +478,6 @@ class CaseHistoriesTab(ttk.Frame):
         self.summary_var.set(
             f"Shown: {len(rows)} / Total: {len(self.rows)} | Database: {self.database_path}"
         )
-
 
     def on_select(self, _event=None):
         selection = self.tree.selection()
@@ -565,20 +515,9 @@ class CaseHistoriesTab(ttk.Frame):
                 selected_row["observed_state"] = observed_state
                 selected_row["comment"] = comment
 
-                case_id = selected_row.get("id")
-                if case_id is not None:
-                    update_case(
-                        int(case_id),
-                        {
-                            "observed_state": observed_state,
-                            "comment": comment,
-                        },
-                        self.database_path,
-                    )
-
-                
-
-        self.load_from_database()
+        self.update_filter_values()
+        self.apply_filters()
+        self.save_database()
 
     def delete_selected(self):
         selection = self.tree.selection()
@@ -605,49 +544,76 @@ class CaseHistoriesTab(ttk.Frame):
 
         self.rows = [row for row in self.rows if row not in rows_to_delete]
 
-        for row in rows_to_delete:
-            case_id = row.get("id")
-            if case_id is not None:
-                delete_case(int(case_id), self.database_path)
-
-        self.load_from_database()
-
+        self.update_filter_values()
+        self.apply_filters()
+        self.save_database()
 
     def load_from_database(self):
-        self.rows = list_cases(self.database_path)
-        self.database_path_var.set(str(self.database_path))
+        self.rows = load_cases(self.database_path)
         self.update_filter_values()
         self.apply_filters()
 
-
     def save_database(self):
+        save_cases(self.rows, self.database_path)
         self.database_path_var.set(str(self.database_path))
         self.summary_var.set(
-            f"Shown: {len(self.filtered_rows)} / Total: {len(self.rows)} | SQLite: {self.database_path}"
+            f"Shown: {len(self.filtered_rows)} / Total: {len(self.rows)} | Saved to: {self.database_path}"
         )
-
 
     def new_database(self):
-        messagebox.showinfo(
-            "SQLite mode",
-            "Case histories are now stored in the SQLite project database.",
+        output_path = filedialog.asksaveasfilename(
+            title="Create new case history database",
+            defaultextension=".csv",
+            filetypes=[("CSV database", "*.csv")],
+            initialfile="case_histories.csv",
         )
 
+        if not output_path:
+            return
+
+        answer = messagebox.askyesno(
+            "Create new database",
+            "Create a new empty case history database?\n\n"
+            "Unsaved changes in the current database should be saved first.",
+        )
+
+        if not answer:
+            return
+
+        self.database_path = create_empty_cases_file(output_path)
+        self.rows = []
+        self.reset_filters()
+        self.update_filter_values()
+        self.database_path_var.set(str(self.database_path))
+        self.save_database()
 
     def load_database_as(self):
-        messagebox.showinfo(
-            "SQLite mode",
-            "Loading separate CSV databases is disabled in SQLite mode.",
+        input_path = filedialog.askopenfilename(
+            title="Load case history database",
+            filetypes=[("CSV database", "*.csv"), ("All files", "*.*")],
         )
 
+        if not input_path:
+            return
+
+        self.database_path = Path(input_path)
+        self.database_path_var.set(str(self.database_path))
+        self.load_from_database()
 
     def save_database_as(self):
-        messagebox.showinfo(
-            "SQLite mode",
-            "Saving separate CSV databases is disabled in SQLite mode.",
+        output_path = filedialog.asksaveasfilename(
+            title="Save case history database as",
+            defaultextension=".csv",
+            filetypes=[("CSV database", "*.csv")],
+            initialfile=Path(self.database_path).name,
         )
 
+        if not output_path:
+            return
 
+        self.database_path = Path(output_path)
+        self.database_path_var.set(str(self.database_path))
+        self.save_database()
 
     def export_to_excel(self):
         rows_to_export = self.get_filtered_rows()
@@ -724,9 +690,10 @@ class CaseHistoriesTab(ttk.Frame):
             if not answer:
                 return
 
-            create_cases(imported_rows, self.database_path)
-            self.load_from_database()
-
+            self.rows.extend(imported_rows)
+            self.update_filter_values()
+            self.apply_filters()
+            self.save_database()
 
             messagebox.showinfo(
                 "Import complete",
@@ -735,21 +702,3 @@ class CaseHistoriesTab(ttk.Frame):
 
         except Exception as error:
             messagebox.showerror("Import error", str(error))
-
-    def clear_all_cases(self):
-        answer = messagebox.askyesno(
-            "Clear all cases",
-            "Delete ALL case histories from the SQLite database?\n\n"
-            "This cannot be undone.",
-        )
-
-        if not answer:
-            return
-
-        delete_all_cases(self.database_path)
-        self.load_from_database()
-
-        messagebox.showinfo(
-            "Cases deleted",
-            "All case histories were deleted from the SQLite database.",
-        )

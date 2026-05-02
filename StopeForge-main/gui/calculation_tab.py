@@ -25,7 +25,6 @@ class CalculationTab(ttk.Frame):
         self.joint_entries: list[dict[str, tk.StringVar]] = []
         self.last_result = None
         self.last_joint_sets = []
-        self.calculation_mode_var = tk.StringVar(value="Standard")
 
         self._build_ui()
 
@@ -81,30 +80,6 @@ class CalculationTab(ttk.Frame):
         self._add_entry(frame, 1, "Domain", "domain_name", "Domain 1")
         self._add_entry(frame, 2, "Stope ID", "stope_id", "Stope 001")
         self._add_entry(frame, 3, "Comment", "comment", "")
-
-        ttk.Label(frame, text="Assessment mode").grid(
-            row=4,
-            column=0,
-            sticky="w",
-            padx=6,
-            pady=4,
-        )
-
-        ttk.Combobox(
-            frame,
-            textvariable=self.calculation_mode_var,
-            values=["Standard", "Compare"],
-            state="readonly",
-            width=18,
-        ).grid(row=4, column=1, sticky="w", padx=6, pady=4)
-
-        ttk.Label(
-            frame,
-            text=(
-                "Standard = standard Mathews–Potvin assessment. Compare = standard assessment plus saved local boundary."
-            ),
-            foreground="#555555",
-        ).grid(row=5, column=0, columnspan=2, sticky="w", padx=6, pady=(4, 4))
 
 
     def _build_stress_frame(self):
@@ -203,6 +178,7 @@ class CalculationTab(ttk.Frame):
             (SurfaceType.END_WALL, "90", "20", ""),
         ]
 
+
         for row, (surface_type, dip, q_prime, stress_factor_a) in enumerate(default_surfaces, start=1):
             ttk.Label(frame, text=surface_type.value).grid(
                 row=row,
@@ -214,7 +190,16 @@ class CalculationTab(ttk.Frame):
 
             dip_var = tk.StringVar(value=dip)
             q_prime_var = tk.StringVar(value=q_prime)
+
             stress_factor_a_var = tk.StringVar(value=stress_factor_a)
+            
+            ttk.Entry(frame, textvariable=stress_factor_a_var, width=16).grid(
+                row=row,
+                column=3,
+                padx=6,
+                pady=3,
+                sticky="w",
+            )
 
             ttk.Entry(frame, textvariable=dip_var, width=16).grid(
                 row=row,
@@ -230,13 +215,6 @@ class CalculationTab(ttk.Frame):
                 pady=3,
                 sticky="w",
             )
-            ttk.Entry(frame, textvariable=stress_factor_a_var, width=16).grid(
-                row=row,
-                column=3,
-                padx=6,
-                pady=3,
-                sticky="w",
-            )
 
             self.surface_entries[surface_type] = {
                 "dip": dip_var,
@@ -244,15 +222,17 @@ class CalculationTab(ttk.Frame):
                 "stress_factor_a": stress_factor_a_var,
             }
 
-        ttk.Label(
-            frame,
-            text=(
-                "Surface dip direction is derived from hanging wall dip direction. "
-                "B is calculated from true interplane angle. "
-                "A override is optional; leave it blank to use simplified automatic A."
-            ),
-            foreground="#555555",
-        ).grid(row=5, column=0, columnspan=4, sticky="w", padx=6, pady=(8, 4))
+
+            ttk.Label(
+                frame,
+                text=(
+                    "Surface dip direction is derived from hanging wall dip direction. "
+                    "B is calculated from true interplane angle. "
+                    "A override is optional; leave it blank to use simplified automatic A."
+                ),
+                foreground="#555555",
+            ).grid(row=5, column=0, columnspan=4, sticky="w", padx=6, pady=(8, 4))
+
 
     def _build_buttons(self):
         frame = ttk.Frame(self.scrollable_frame)
@@ -288,10 +268,19 @@ class CalculationTab(ttk.Frame):
         frame.grid(row=6, column=0, sticky="nsew", padx=10, pady=8)
 
         columns = (
-            "surface", "dip", "q_prime", "a", "b", "c", "n",
-            "actual_hr", "hr", "hro", "stable_span", "cave_span",
-            "rating_length", "standard_state", "local_state",
-            "local_boundary", "local_boundary_n",
+            "surface",
+            "dip",
+            "q_prime",
+            "a",
+            "b",
+            "c",
+            "n",
+            "hr",
+            "hro",
+            "stable_span",
+            "cave_span",
+            "rating_length",
+            "state",
         )
 
         self.results_tree = ttk.Treeview(frame, columns=columns, show="headings", height=7)
@@ -304,16 +293,12 @@ class CalculationTab(ttk.Frame):
             "b": "B",
             "c": "C",
             "n": "N",
-            "actual_hr": "Actual HR",
             "hr": "HR stable",
             "hro": "HR cave",
             "stable_span": "Stable span",
             "cave_span": "Cave span",
             "rating_length": "Rating length",
-            "standard_state": "Standard State",
-            "local_state": "Local State",
-            "local_boundary": "Local Boundary",
-            "local_boundary_n": "Boundary N",
+            "state": "State",
         }
 
         widths = {
@@ -324,16 +309,12 @@ class CalculationTab(ttk.Frame):
             "b": 70,
             "c": 70,
             "n": 80,
-            "actual_hr": 90,
             "hr": 90,
             "hro": 90,
             "stable_span": 110,
             "cave_span": 110,
             "rating_length": 110,
-            "standard_state": 120,
-            "local_state": 120,
-            "local_boundary": 180,
-            "local_boundary_n": 100,
+            "state": 100,
         }
 
         for column in columns:
@@ -450,6 +431,7 @@ class CalculationTab(ttk.Frame):
                 )
             )
 
+
         return surfaces
 
     def calculate(self):
@@ -462,7 +444,6 @@ class CalculationTab(ttk.Frame):
                 stope=stope,
                 surfaces=surfaces,
                 joint_sets=joint_sets,
-                calculation_mode=self.calculation_mode_var.get(),
             )
 
             self.last_result = result
@@ -488,29 +469,19 @@ class CalculationTab(ttk.Frame):
                     f"{surface.joint_factor_b:.3f}",
                     f"{surface.surface_factor_c:.3f}",
                     f"{surface.stability_number_n:.2f}",
-                    "" if surface.actual_hr_m is None else f"{surface.actual_hr_m:.2f}",
                     f"{surface.hr_stable:.2f}",
                     f"{surface.hr_caving:.2f}",
                     self._format_length(surface.stable_strike_length_m),
                     self._format_length(surface.cave_strike_length_m),
                     f"{surface.rating_length_m:.2f}",
                     surface.stability_state.value,
-                    "" if surface.local_state is None else surface.local_state.value,
-                    "" if surface.local_boundary_name is None else surface.local_boundary_name,
-                    "" if surface.local_boundary_n is None else f"{surface.local_boundary_n:.2f}",
                 ),
             )
 
-        summary_text = (
-            f"Mode: {result.calculation_mode} | "
-            f"Standard final state: {result.final_state.value} | "
+        self.summary_var.set(
+            f"Final state: {result.final_state.value} | "
             f"Limiting surface: {result.limiting_surface.value}"
         )
-
-        if result.local_final_state is not None:
-            summary_text += f" | Local final state: {result.local_final_state.value}"
-
-        self.summary_var.set(summary_text)
 
     def save_to_project_overview(self):
         if self.last_result is None:

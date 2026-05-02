@@ -4,14 +4,12 @@ from tkinter import ttk, messagebox, filedialog
 import numpy as np
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 from matplotlib.figure import Figure
-from db.connection import DEFAULT_PROJECT_DB_PATH
-from db.schema import initialize_database
-from db.boundary_repository import (
-    list_boundaries,
+from core.boundary_store import (
+    load_boundaries,
     upsert_boundary,
     delete_boundary,
+    DEFAULT_BOUNDARIES_PATH,
 )
-
 
 ALL_VALUE = "All"
 
@@ -85,10 +83,6 @@ class StabilityGraphTab(ttk.Frame):
         super().__init__(parent)
 
         self.get_case_rows_callback = get_case_rows_callback
-
-        self.database_path = DEFAULT_PROJECT_DB_PATH
-        initialize_database(self.database_path)
-
 
         self.project_filter_var = tk.StringVar(value=ALL_VALUE)
         self.domain_filter_var = tk.StringVar(value=ALL_VALUE)
@@ -990,19 +984,13 @@ class StabilityGraphTab(ttk.Frame):
         project = row.get("project", "") or "All projects"
         domain = row.get("domain", "") or "All domains"
         surface = row.get("surface", "") or "All surfaces"
-        boundary_type = row.get("boundary_type", "") or "Stable-Unstable"
         name = row.get("boundary_name", "") or "Unnamed boundary"
 
-        return f"{project} | {domain} | {surface} | {boundary_type} | {name}"
-
-
+        return f"{project} | {domain} | {surface} | {name}"
 
 
     def refresh_saved_boundaries(self):
-        self.saved_boundaries = list_boundaries(
-            db_path=self.database_path,
-            active_only=True,
-        )
+        self.saved_boundaries = load_boundaries(DEFAULT_BOUNDARIES_PATH)
 
         display_values = [
             self._make_boundary_display_name(row)
@@ -1018,8 +1006,6 @@ class StabilityGraphTab(ttk.Frame):
             self.saved_boundary_var.set("")
 
 
-
-
     def _get_selected_boundary_row(self) -> dict | None:
         selected_display_name = self.saved_boundary_var.get()
 
@@ -1033,17 +1019,10 @@ class StabilityGraphTab(ttk.Frame):
         return None
 
 
-
     def save_current_boundary(self):
         slope = _safe_float(self.boundary_slope_var.get())
         intercept = _safe_float(self.boundary_intercept_var.get())
-
-        percentile = (
-            _safe_float(self.envelope_percentile_var.get())
-            if hasattr(self, "envelope_percentile_var")
-            else None
-        )
-
+        percentile = _safe_float(self.envelope_percentile_var.get()) if hasattr(self, "envelope_percentile_var") else ""
         margin = _safe_float(self.envelope_margin_var.get())
 
         if slope is None or intercept is None:
@@ -1067,18 +1046,15 @@ class StabilityGraphTab(ttk.Frame):
             "domain": self._get_current_filter_value(self.domain_filter_var),
             "surface": self._get_current_filter_value(self.surface_filter_var),
             "boundary_name": boundary_name,
-            "boundary_type": "Stable-Unstable",
             "mode": "linear",
             "slope": slope,
             "intercept": intercept,
-            "percentile": percentile,
-            "margin": margin,
-            "is_standard": 0,
-            "is_active": 1,
+            "percentile": "" if percentile is None else percentile,
+            "margin": "" if margin is None else margin,
             "comment": self.boundary_comment_var.get().strip(),
         }
 
-        upsert_boundary(row, self.database_path)
+        upsert_boundary(row, DEFAULT_BOUNDARIES_PATH)
         self.refresh_saved_boundaries()
 
         display_name = self._make_boundary_display_name(row)
@@ -1086,9 +1062,8 @@ class StabilityGraphTab(ttk.Frame):
 
         messagebox.showinfo(
             "Boundary saved",
-            f"Boundary was saved to SQLite database:\n{self.database_path}",
+            f"Boundary was saved to:\n{DEFAULT_BOUNDARIES_PATH}",
         )
-
 
 
     def load_selected_boundary(self):
@@ -1105,18 +1080,29 @@ class StabilityGraphTab(ttk.Frame):
         domain = row.get("domain", "")
         surface = row.get("surface", "")
 
-        self.project_filter_var.set(project if project else ALL_VALUE)
-        self.domain_filter_var.set(domain if domain else ALL_VALUE)
-        self.surface_filter_var.set(surface if surface else ALL_VALUE)
+        if project:
+            self.project_filter_var.set(project)
+        else:
+            self.project_filter_var.set(ALL_VALUE)
+
+        if domain:
+            self.domain_filter_var.set(domain)
+        else:
+            self.domain_filter_var.set(ALL_VALUE)
+
+        if surface:
+            self.surface_filter_var.set(surface)
+        else:
+            self.surface_filter_var.set(ALL_VALUE)
 
         self.boundary_name_var.set(row.get("boundary_name", "Local boundary"))
         self.boundary_slope_var.set(str(row.get("slope", "1.0")))
         self.boundary_intercept_var.set(str(row.get("intercept", "0.0")))
 
-        if row.get("margin", "") not in ("", None):
+        if row.get("margin", "") != "":
             self.envelope_margin_var.set(str(row.get("margin", "")))
 
-        if hasattr(self, "envelope_percentile_var") and row.get("percentile", "") not in ("", None):
+        if hasattr(self, "envelope_percentile_var") and row.get("percentile", "") != "":
             self.envelope_percentile_var.set(str(row.get("percentile", "")))
 
         self.boundary_comment_var.set(row.get("comment", ""))
@@ -1137,15 +1123,6 @@ class StabilityGraphTab(ttk.Frame):
             )
             return
 
-        boundary_id = row.get("id")
-
-        if boundary_id is None:
-            messagebox.showerror(
-                "Delete boundary error",
-                "Selected boundary has no SQLite id.",
-            )
-            return
-
         answer = messagebox.askyesno(
             "Delete boundary",
             f"Delete saved boundary?\n\n{self._make_boundary_display_name(row)}",
@@ -1154,14 +1131,13 @@ class StabilityGraphTab(ttk.Frame):
         if not answer:
             return
 
-        delete_boundary(int(boundary_id), self.database_path)
+        delete_boundary(row, DEFAULT_BOUNDARIES_PATH)
         self.refresh_saved_boundaries()
 
         messagebox.showinfo(
             "Boundary deleted",
-            "Saved boundary was deleted from SQLite database.",
+            "Saved boundary was deleted.",
         )
-
 
 
     def export_png(self):
