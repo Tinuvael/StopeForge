@@ -10,7 +10,12 @@ from db.boundary_repository import (
     list_boundaries,
     find_best_boundary,
     delete_boundary,
+    list_boundaries_exact,
+    find_active_boundary_exact,
+    set_active_boundary,
+    deactivate_boundary,
 )
+
 
 
 def test_case_repository_create_list_update_delete(tmp_path):
@@ -158,3 +163,70 @@ def test_boundary_repository_upsert_list_find_delete(tmp_path):
 
     rows = list_boundaries(db_path=db_path, project="Mayskoe")
     assert rows == []
+
+def test_exact_active_boundary_selection(tmp_path):
+    db_path = tmp_path / "test_project.sqlite"
+
+    initialize_database(db_path)
+
+    boundary_1 = upsert_boundary(
+        {
+            "project": "Mayskoe",
+            "domain": "Рудная зона 2",
+            "surface": "Hanging wall",
+            "boundary_name": "Draft boundary",
+            "boundary_type": "Stable-Unstable",
+            "mode": "linear",
+            "slope": 0.5,
+            "intercept": -0.8,
+            "is_active": 0,
+        },
+        db_path=db_path,
+    )
+
+    boundary_2 = upsert_boundary(
+        {
+            "project": "Mayskoe",
+            "domain": "Рудная зона 2",
+            "surface": "Hanging wall",
+            "boundary_name": "Active boundary",
+            "boundary_type": "Stable-Unstable",
+            "mode": "linear",
+            "slope": 0.8,
+            "intercept": -1.2,
+            "is_active": 0,
+        },
+        db_path=db_path,
+    )
+
+    set_active_boundary(boundary_2, db_path=db_path)
+
+    exact_rows = list_boundaries_exact(
+        project="Mayskoe",
+        domain="Рудная зона 2",
+        surface="Hanging wall",
+        db_path=db_path,
+    )
+
+    assert len(exact_rows) == 2
+
+    active = find_active_boundary_exact(
+        project="Mayskoe",
+        domain="Рудная зона 2",
+        surface="Hanging wall",
+        db_path=db_path,
+    )
+
+    assert active is not None
+    assert active["boundary_name"] == "Active boundary"
+
+    deactivate_boundary(boundary_2, db_path=db_path)
+
+    active = find_active_boundary_exact(
+        project="Mayskoe",
+        domain="Рудная зона 2",
+        surface="Hanging wall",
+        db_path=db_path,
+    )
+
+    assert active is None

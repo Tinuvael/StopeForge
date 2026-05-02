@@ -48,8 +48,10 @@ def _normalize_row(row: dict[str, Any]) -> dict[str, Any]:
     return clean_row
 
 
-
-def upsert_boundary(row: dict[str, Any], db_path: str | Path = DEFAULT_PROJECT_DB_PATH) -> int:
+def upsert_boundary(
+    row: dict[str, Any],
+    db_path: str | Path = DEFAULT_PROJECT_DB_PATH,
+) -> int:
     initialize_database(db_path)
 
     clean_row = _normalize_row(row)
@@ -112,6 +114,9 @@ def upsert_boundary(row: dict[str, Any], db_path: str | Path = DEFAULT_PROJECT_D
             ),
         ).fetchone()
 
+        if existing is None:
+            raise ValueError("Boundary was not inserted or found after upsert.")
+
         return int(existing["id"])
 
 
@@ -150,6 +155,7 @@ def list_boundaries(
     query += """
         ORDER BY
             is_standard DESC,
+            is_active DESC,
             project,
             domain,
             surface,
@@ -162,27 +168,43 @@ def list_boundaries(
         return [dict(row) for row in rows]
 
 
-def get_boundary_by_id(boundary_id: int, db_path: str | Path = DEFAULT_PROJECT_DB_PATH) -> dict[str, Any] | None:
+def list_boundaries_exact(
+    project: str,
+    domain: str,
+    surface: str,
+    boundary_type: str = "Stable-Unstable",
+    db_path: str | Path = DEFAULT_PROJECT_DB_PATH,
+    active_only: bool = False,
+) -> list[dict[str, Any]]:
+    """
+    List boundaries only for exact Project + Domain + Surface match.
+    No wildcard matching.
+    """
     initialize_database(db_path)
 
+    query = """
+        SELECT *
+        FROM local_boundaries
+        WHERE project = ?
+          AND domain = ?
+          AND surface = ?
+          AND boundary_type = ?
+    """
+    params: list[Any] = [project, domain, surface, boundary_type]
+
+    if active_only:
+        query += " AND is_active = 1"
+
+    query += """
+        ORDER BY
+            is_active DESC,
+            boundary_name,
+            id
+    """
+
     with get_connection(db_path) as connection:
-        row = connection.execute(
-            "SELECT * FROM local_boundaries WHERE id = ?;",
-            (boundary_id,),
-        ).fetchone()
-
-        return dict(row) if row else None
-
-
-def delete_boundary(boundary_id: int, db_path: str | Path = DEFAULT_PROJECT_DB_PATH) -> None:
-    initialize_database(db_path)
-
-    with get_connection(db_path) as connection:
-        connection.execute(
-            "DELETE FROM local_boundaries WHERE id = ?;",
-            (boundary_id,),
-        )
-        connection.commit()
+        rows = connection.execute(query, params).fetchall()
+        return [dict(row) for row in rows]
 
 
 def find_best_boundary(
@@ -192,6 +214,12 @@ def find_best_boundary(
     boundary_type: str = "Stable-Unstable",
     db_path: str | Path = DEFAULT_PROJECT_DB_PATH,
 ) -> dict[str, Any] | None:
+    """
+    Old compatibility function.
+
+    This allows wildcard matching.
+    New v1.0 Compare logic should prefer find_active_boundary_exact().
+    """
     boundaries = list_boundaries(
         db_path=db_path,
         project=project,
@@ -219,3 +247,127 @@ def find_best_boundary(
         return value
 
     return max(boundaries, key=score)
+
+
+def find_active_boundary_exact(
+    project: str,
+    domain: str,
+    surface: str,
+    boundary_type: str = "Stable-Unstable",
+    db_path: str | Path = DEFAULT_PROJECT_DB_PATH,
+) -> dict[str, Any] | None:
+    """
+    Find active boundary only for exact Project + Domain + Surface match.
+    """
+    rows = list_boundaries_exact(
+        project=project,
+        domain=domain,
+        surface=surface,
+        boundary_type=boundary_type,
+        db_path=db_path,
+        active_only=True,
+    )
+
+    return rows[0] if rows else None
+
+
+def get_boundary_by_id(
+    boundary_id: int,
+    db_path: str | Path = DEFAULT_PROJECT_DB_PATH,
+) -> dict[str, Any] | None:
+    initialize_database(db_path)
+
+    with get_connection(db_path) as connection:
+        row = connection.execute(
+            "SELECT * FROM local_boundaries WHERE id = ?;",
+            (boundary_id,),
+        ).fetchone()
+
+        return dict(row) if row else None
+
+
+def set_active_boundary(
+    boundary_id: int,
+    db_path: str | Path = DEFAULT_PROJECT_DB_PATH,
+) -> None:
+    """
+    Make selected boundary active and deactivate other boundaries
+    for the same Project + Domain + Surface + Boundary type.
+    """
+    initialize_database(db_path)
+
+    with get_connection(db_path) as connection:
+        selected = connection.execute(
+            """
+            SELECT project, domain, surface, boundary_type
+            FROM local_boundaries
+            WHERE id = ?;
+            """,
+            (boundary_id,),
+        ).fetchone()
+
+        if selected is None:
+            raise ValueError(f"Boundary id not found: {boundary_id}")
+
+        connection.execute(
+            """
+            UPDATE local_boundaries
+            SET is_active = 0,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE project = ?
+              AND domain = ?
+              AND surface = ?
+              AND boundary_type = ?;
+            """,
+            (
+                selected["project"],
+                selected["domain"],
+                selected["surface"],
+                selected["boundary_type"],
+            ),
+        )
+
+        connection.execute(
+            """
+            UPDATE local_boundaries
+            SET is_active = 1,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?;
+            """,
+            (boundary_id,),
+        )
+
+        connection.commit()
+
+
+def deactivate_boundary(
+    boundary_id: int,
+    db_path: str | Path = DEFAULT_PROJECT_DB_PATH,
+) -> None:
+    initialize_database(db_path)
+
+    with get_connection(db_path) as connection:
+        connection.execute(
+            """
+            UPDATE local_boundaries
+            SET is_active = 0,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?;
+            """,
+            (boundary_id,),
+        )
+        connection.commit()
+
+
+def delete_boundary(
+    boundary_id: int,
+    db_path: str | Path = DEFAULT_PROJECT_DB_PATH,
+) -> None:
+    initialize_database(db_path)
+
+    with get_connection(db_path) as connection:
+        connection.execute(
+            "DELETE FROM local_boundaries WHERE id = ?;",
+            (boundary_id,),
+        )
+        connection.commit()

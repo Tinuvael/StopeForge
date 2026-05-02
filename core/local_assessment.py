@@ -1,4 +1,4 @@
-from db.boundary_repository import find_best_boundary
+from db.boundary_repository import find_active_boundary_exact
 from db.connection import DEFAULT_PROJECT_DB_PATH
 from core.models import SurfaceType, StabilityState
 
@@ -26,15 +26,42 @@ def calculate_surface_hydraulic_radius(surface_type: SurfaceType, stope) -> floa
     return (a * b) / (2 * (a + b))
 
 
-def assess_against_linear_boundary(
+def calculate_boundary_n(
+    hydraulic_radius: float,
+    boundary: dict,
+) -> float:
+    mode = str(boundary.get("mode", "linear") or "linear").lower()
+
+    slope = float(boundary["slope"])
+    intercept = float(boundary["intercept"])
+
+    if hydraulic_radius <= 0:
+        raise ValueError("Hydraulic radius must be greater than zero.")
+
+    if mode == "power":
+        # Power curve:
+        # N = k * HR^a
+        # slope = a
+        # intercept = k
+        if intercept <= 0:
+            raise ValueError("Power curve coefficient k must be greater than zero.")
+
+        return intercept * (hydraulic_radius ** slope)
+
+    # Linear curve:
+    # N = a * HR + b
+    return slope * hydraulic_radius + intercept
+
+
+def assess_against_boundary(
     stability_number_n: float,
     hydraulic_radius: float,
     boundary: dict,
 ) -> tuple[StabilityState, float]:
-    slope = float(boundary["slope"])
-    intercept = float(boundary["intercept"])
-
-    boundary_n = slope * hydraulic_radius + intercept
+    boundary_n = calculate_boundary_n(
+        hydraulic_radius=hydraulic_radius,
+        boundary=boundary,
+    )
 
     if boundary_n <= 0:
         return StabilityState.UNKNOWN, boundary_n
@@ -45,6 +72,7 @@ def assess_against_linear_boundary(
     return StabilityState.UNSTABLE, boundary_n
 
 
+
 def assess_surface_local(
     project: str,
     domain: str,
@@ -53,18 +81,19 @@ def assess_surface_local(
     hydraulic_radius: float,
     db_path=DEFAULT_PROJECT_DB_PATH,
 ) -> tuple[StabilityState, str, float | None]:
-    boundary = find_best_boundary(
-        project=project,
-        domain=domain,
-        surface=surface,
-        boundary_type="Stable-Unstable",
-        db_path=db_path,
-    )
+    boundary = find_active_boundary_exact(
+    project=project,
+    domain=domain,
+    surface=surface,
+    boundary_type="Stable-Unstable",
+    db_path=db_path,
+)
+
 
     if boundary is None:
         return StabilityState.UNKNOWN, "Not found", None
 
-    local_state, boundary_n = assess_against_linear_boundary(
+    local_state, boundary_n = assess_against_boundary(
         stability_number_n=stability_number_n,
         hydraulic_radius=hydraulic_radius,
         boundary=boundary,
