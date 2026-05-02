@@ -271,9 +271,16 @@ class CaseHistoriesTab(ttk.Frame):
             "n",
             "hr",
             "predicted_state",
+            "calculation_mode",
+            "standard_state",
+            "local_state",
+            "local_boundary_name",
+            "local_boundary_n",
+            "actual_hr_m",
             "observed_state",
             "comment",
         )
+
 
         self.tree = ttk.Treeview(table_frame, columns=columns, show="headings", height=20)
 
@@ -294,9 +301,16 @@ class CaseHistoriesTab(ttk.Frame):
             "n": "N",
             "hr": "HR",
             "predicted_state": "Predicted",
+            "calculation_mode": "Mode",
+            "standard_state": "Standard",
+            "local_state": "Local",
+            "local_boundary_name": "Local Boundary",
+            "local_boundary_n": "Boundary N",
+            "actual_hr_m": "Actual HR",
             "observed_state": "Observed",
             "comment": "Comment",
         }
+
 
         widths = {
             "project": 120,
@@ -315,9 +329,16 @@ class CaseHistoriesTab(ttk.Frame):
             "n": 80,
             "hr": 80,
             "predicted_state": 110,
+            "calculation_mode": 90,
+            "standard_state": 100,
+            "local_state": 100,
+            "local_boundary_name": 180,
+            "local_boundary_n": 100,
+            "actual_hr_m": 90,
             "observed_state": 110,
-            "comment": 300,
+            "comment": 260,
         }
+
 
         for column in columns:
             self.tree.heading(column, text=headings[column])
@@ -349,44 +370,65 @@ class CaseHistoriesTab(ttk.Frame):
         ).pack(anchor="w", pady=(8, 0))
 
     def add_from_current_result(self, result: StopeResult, default_comment: str = ""):
-        new_rows = []
+        
 
-        for surface in result.surfaces:
-            hr = _calculate_shape_factor_hr(surface.surface_type, result.stope)
+            new_rows = []
+            calculation_mode = getattr(result, "calculation_mode", "Standard")
 
-            row = {
-                "project": result.stope.project_name,
-                "domain": result.stope.domain_name,
-                "stope_id": result.stope.stope_id,
-                "surface": surface.surface_type.value,
-                "depth_m": result.stope.depth_m,
-                "height_m": result.stope.stope_height_m,
-                "avg_dip_deg": result.stope.average_dip_deg,
-                "width_m": result.stope.stope_width_m,
-                "span_m": result.stope.stope_span_m,
-                "q_prime": _safe_round(surface.q_prime, 3),
-                "a": _safe_round(surface.stress_factor_a, 3),
-                "b": _safe_round(surface.joint_factor_b, 3),
-                "c": _safe_round(surface.surface_factor_c, 3),
-                "n": _safe_round(surface.stability_number_n, 3),
-                "shape_factor_hr_m": _safe_round(hr, 3),
-                "stable_hr_limit_m": _safe_round(surface.hr_stable, 3),
-                "predicted_state": surface.stability_state.value,
-                "observed_state": "Unknown",
-                "comment": default_comment,
-            }
+            for surface in result.surfaces:
+                actual_hr = getattr(surface, "actual_hr_m", None)
 
-            new_rows.append(row)
+                if actual_hr is None:
+                    actual_hr = _calculate_shape_factor_hr(surface.surface_type, result.stope)
 
-        create_cases(new_rows, self.database_path)
-        self.load_from_database()
+                local_state = getattr(surface, "local_state", None)
+                local_boundary_name = getattr(surface, "local_boundary_name", None)
+                local_boundary_n = getattr(surface, "local_boundary_n", None)
 
+                standard_state = surface.stability_state.value
+                local_state_value = "" if local_state is None else local_state.value
 
-        messagebox.showinfo(
-            "Saved",
-            "Current calculation was added to Case Histories.\n\n"
-            "Observed state is set to Unknown. Select rows and update it manually.",
-        )
+                predicted_state = standard_state
+
+                row = {
+                    "project": result.stope.project_name,
+                    "domain": result.stope.domain_name,
+                    "stope_id": result.stope.stope_id,
+                    "surface": surface.surface_type.value,
+                    "depth_m": result.stope.depth_m,
+                    "height_m": result.stope.stope_height_m,
+                    "avg_dip_deg": result.stope.average_dip_deg,
+                    "width_m": result.stope.stope_width_m,
+                    "span_m": result.stope.stope_span_m,
+                    "q_prime": _safe_round(surface.q_prime, 3),
+                    "a": _safe_round(surface.stress_factor_a, 3),
+                    "b": _safe_round(surface.joint_factor_b, 3),
+                    "c": _safe_round(surface.surface_factor_c, 3),
+                    "n": _safe_round(surface.stability_number_n, 3),
+                    "shape_factor_hr_m": _safe_round(actual_hr, 3),
+                    "stable_hr_limit_m": _safe_round(surface.hr_stable, 3),
+                    "predicted_state": predicted_state,
+                    "calculation_mode": calculation_mode,
+                    "standard_state": standard_state,
+                    "local_state": local_state_value,
+                    "local_boundary_name": "" if local_boundary_name is None else local_boundary_name,
+                    "local_boundary_n": "" if local_boundary_n is None else _safe_round(local_boundary_n, 3),
+                    "actual_hr_m": _safe_round(actual_hr, 3),
+                    "observed_state": "Unknown",
+                    "comment": default_comment,
+                }
+
+                new_rows.append(row)
+
+            create_cases(new_rows, self.database_path)
+            self.load_from_database()
+
+            messagebox.showinfo(
+                "Saved",
+                "Current calculation was added to Case Histories.\n\n"
+                "Observed state is set to Unknown. Select rows and update it manually.",
+            )
+
 
     def update_filter_values(self):
         projects = sorted({row.get("project", "") for row in self.rows if row.get("project", "")})
@@ -471,6 +513,12 @@ class CaseHistoriesTab(ttk.Frame):
                     row.get("n", ""),
                     row.get("shape_factor_hr_m", ""),
                     row.get("predicted_state", ""),
+                    row.get("calculation_mode", ""),
+                    row.get("standard_state", ""),
+                    row.get("local_state", ""),
+                    row.get("local_boundary_name", ""),
+                    row.get("local_boundary_n", ""),
+                    row.get("actual_hr_m", ""),
                     row.get("observed_state", "Unknown"),
                     row.get("comment", ""),
                 ),
@@ -479,6 +527,7 @@ class CaseHistoriesTab(ttk.Frame):
         self.summary_var.set(
             f"Shown: {len(rows)} / Total: {len(self.rows)} | Database: {self.database_path}"
         )
+
 
     def on_select(self, _event=None):
         selection = self.tree.selection()

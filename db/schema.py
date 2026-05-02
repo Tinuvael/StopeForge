@@ -5,11 +5,22 @@ from db.connection import get_connection, DEFAULT_PROJECT_DB_PATH
 
 SCHEMA_VERSION = 1
 
+def _column_exists(connection, table_name: str, column_name: str) -> bool:
+    columns = connection.execute(f"PRAGMA table_info({table_name});").fetchall()
+    return any(column["name"] == column_name for column in columns)
+
+
+def _add_column_if_missing(connection, table_name: str, column_name: str, column_sql: str) -> None:
+    if not _column_exists(connection, table_name, column_name):
+        connection.execute(
+            f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_sql};"
+        )
 
 def initialize_database(db_path: str | Path = DEFAULT_PROJECT_DB_PATH) -> None:
     with get_connection(db_path) as connection:
         connection.executescript(
-            """
+
+                        """
             CREATE TABLE IF NOT EXISTS app_metadata (
                 key TEXT PRIMARY KEY,
                 value TEXT NOT NULL
@@ -101,6 +112,45 @@ def initialize_database(db_path: str | Path = DEFAULT_PROJECT_DB_PATH) -> None:
                 ON local_boundaries(boundary_type);
             """
         )
+            
+        _add_column_if_missing(
+            connection,
+            "case_histories",
+            "calculation_mode",
+            "TEXT NOT NULL DEFAULT 'Standard'",
+        )
+        _add_column_if_missing(
+            connection,
+            "case_histories",
+            "standard_state",
+            "TEXT NOT NULL DEFAULT ''",
+        )
+        _add_column_if_missing(
+            connection,
+            "case_histories",
+            "local_state",
+            "TEXT NOT NULL DEFAULT ''",
+        )
+        _add_column_if_missing(
+            connection,
+            "case_histories",
+            "local_boundary_name",
+            "TEXT NOT NULL DEFAULT ''",
+        )
+        _add_column_if_missing(
+            connection,
+            "case_histories",
+            "local_boundary_n",
+            "REAL",
+        )
+        _add_column_if_missing(
+            connection,
+            "case_histories",
+            "actual_hr_m",
+            "REAL",
+        )
+
+
 
         connection.execute(
             """
@@ -111,3 +161,14 @@ def initialize_database(db_path: str | Path = DEFAULT_PROJECT_DB_PATH) -> None:
         )
 
         connection.commit()
+
+def _column_exists(connection, table_name: str, column_name: str) -> bool:
+    columns = connection.execute(f"PRAGMA table_info({table_name});").fetchall()
+    return any(column["name"] == column_name for column in columns)
+
+
+def _add_column_if_missing(connection, table_name: str, column_name: str, column_sql: str) -> None:
+    if not _column_exists(connection, table_name, column_name):
+        connection.execute(
+            f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_sql};"
+        )

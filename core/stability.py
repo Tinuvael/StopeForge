@@ -309,7 +309,7 @@ def calculate_stope_result(
         local_boundary_name = None
         local_boundary_n = None
 
-        if calculation_mode in ("Local", "Compare"):
+        if calculation_mode == "Compare":
             local_state, local_boundary_name, local_boundary_n = assess_surface_local(
                 project=stope.project_name,
                 domain=stope.domain_name,
@@ -352,7 +352,15 @@ def calculate_stope_result(
         StabilityState.CAVED: 3,
     }
 
-    limiting_surface_result = local_final_state = None
+    limiting_surface_result = max(
+        surface_results,
+        key=lambda result: (
+            priority[result.stability_state],
+            result.rating_length_m / max(result.stable_strike_length_m, 0.0001),
+        ),
+    )
+
+    local_final_state = None
 
     if calculation_mode in ("Local", "Compare"):
         local_states = [
@@ -364,7 +372,6 @@ def calculate_stope_result(
         if local_states:
             local_final_state = get_worst_state(local_states)
 
-
     return StopeResult(
         stope=stope,
         surfaces=surface_results,
@@ -373,4 +380,3 @@ def calculate_stope_result(
         calculation_mode=calculation_mode,
         local_final_state=local_final_state,
     )
-

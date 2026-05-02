@@ -23,9 +23,16 @@ CASE_FIELDS = [
     "shape_factor_hr_m",
     "stable_hr_limit_m",
     "predicted_state",
+    "calculation_mode",
+    "standard_state",
+    "local_state",
+    "local_boundary_name",
+    "local_boundary_n",
+    "actual_hr_m",
     "observed_state",
     "comment",
 ]
+
 
 
 def _normalize_row(row: dict[str, Any]) -> dict[str, Any]:
@@ -38,9 +45,14 @@ def _normalize_row(row: dict[str, Any]) -> dict[str, Any]:
         "stope_id": "",
         "surface": "",
         "predicted_state": "",
+        "calculation_mode": "Standard",
+        "standard_state": "",
+        "local_state": "",
+        "local_boundary_name": "",
         "observed_state": "Unknown",
         "comment": "",
     }
+
 
     for field, default_value in text_defaults.items():
         if clean_row.get(field) is None:

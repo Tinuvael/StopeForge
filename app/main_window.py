@@ -31,6 +31,7 @@ class StopeForgeApp(tk.Tk):
             on_add_case_histories=self.case_histories_tab.add_from_current_result,
         )
 
+
         self.graph_tab = StabilityGraphTab(
             notebook,
             get_case_rows_callback=lambda: self.case_histories_tab.rows,
