@@ -5,7 +5,6 @@ from gui.calculation_tab import CalculationTab
 from gui.project_overview_tab import ProjectOverviewTab
 from gui.case_histories_tab import CaseHistoriesTab
 from gui.stability_graph_tab import StabilityGraphTab
-from gui.placeholder_tab import PlaceholderTab
 
 
 class StopeForgeApp(tk.Tk):
@@ -37,24 +36,11 @@ class StopeForgeApp(tk.Tk):
             get_case_rows_callback=lambda: self.case_histories_tab.rows,
         )
 
-        self.export_tab = PlaceholderTab(
-            notebook,
-            title="Export",
-            message=(
-                "Export tools will be expanded in a later version.\n\n"
-                "Current exports:\n"
-                "- current calculation to Excel\n"
-                "- project overview to Excel\n"
-                "- case histories to Excel\n"
-                "- stability graph to PNG"
-            ),
-        )
 
         notebook.add(self.calculation_tab, text="Calculation")
         notebook.add(self.project_overview_tab, text="Project Overview")
         notebook.add(self.case_histories_tab, text="Case Histories")
         notebook.add(self.graph_tab, text="Stability Graph")
-        notebook.add(self.export_tab, text="Export")
 
 
 def main():

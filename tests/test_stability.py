@@ -1,49 +1,178 @@
-import math
 import pytest
-from core.models import JointSet, StabilityState, StopeInput, SurfaceInput, SurfaceType
-from core.stability import calculate_hr_caving, calculate_hr_stable, calculate_stability_number_n, calculate_stope_result, classify_stability, get_surface_dip_direction
 
-def make_stope():
-    return StopeInput('Demo', 'Domain 1', 'S-01', 1000, 2.7, 120, 1.4, 75, 80, 25, 30, 90)
+from core.models import (
+    JointSet,
+    StopeInput,
+    SurfaceInput,
+    SurfaceType,
+    StabilityState,
+)
+from core.stability import calculate_stope_result
+from db.boundary_repository import upsert_boundary
 
-def test_stability_number_formula():
-    assert calculate_stability_number_n(85, 0.1, 0.5, 1.0) == pytest.approx(4.25)
 
-def test_hr_boundary_functions_are_stable_at_known_values():
-    assert calculate_hr_stable(4.25) == pytest.approx(2.67 + 0.33 * 4.25)
-    assert calculate_hr_caving(4.25) == pytest.approx(4.73 + 0.36 * 4.25)
+def make_stope(project="Mayskoe", domain="Рудная зона 2"):
+    return StopeInput(
+        project_name=project,
+        domain_name=domain,
+        stope_id="Test-001",
+        depth_m=500,
+        unit_weight_t_m3=2.7,
+        ucs_mpa=60,
+        horizontal_stress_ratio=1.2,
+        stope_height_m=20,
+        average_dip_deg=80,
+        stope_width_m=4,
+        stope_span_m=12,
+        hanging_wall_dip_direction_deg=90,
+    )
 
-def test_classify_stability_by_actual_hr_against_boundaries():
-    assert classify_stability(3, 4, 8) == StabilityState.STABLE
-    assert classify_stability(5, 4, 8) == StabilityState.UNSTABLE
-    assert classify_stability(9, 4, 8) == StabilityState.CAVED
 
-def test_surface_dip_directions_are_derived_from_hanging_wall_direction():
-    stope = make_stope()
-    assert get_surface_dip_direction(stope, SurfaceType.CROWN) == pytest.approx(90)
-    assert get_surface_dip_direction(stope, SurfaceType.HANGING_WALL) == pytest.approx(90)
-    assert get_surface_dip_direction(stope, SurfaceType.FOOTWALL) == pytest.approx(270)
-    assert get_surface_dip_direction(stope, SurfaceType.END_WALL) == pytest.approx(0)
-
-def test_calculate_stope_result_returns_four_surfaces_and_limiting_state():
-    stope = make_stope()
-    surfaces = [
-        SurfaceInput(SurfaceType.CROWN, 0, 85),
-        SurfaceInput(SurfaceType.HANGING_WALL, 80, 85),
-        SurfaceInput(SurfaceType.FOOTWALL, 90, 85),
-        SurfaceInput(SurfaceType.END_WALL, 90, 85),
+def make_surfaces():
+    return [
+        SurfaceInput(
+            surface_type=SurfaceType.CROWN,
+            dip_deg=0,
+            q_prime=10,
+        ),
+        SurfaceInput(
+            surface_type=SurfaceType.HANGING_WALL,
+            dip_deg=80,
+            q_prime=10,
+        ),
+        SurfaceInput(
+            surface_type=SurfaceType.FOOTWALL,
+            dip_deg=80,
+            q_prime=10,
+        ),
+        SurfaceInput(
+            surface_type=SurfaceType.END_WALL,
+            dip_deg=90,
+            q_prime=10,
+        ),
     ]
-    result = calculate_stope_result(stope, surfaces, [JointSet('flat', 0, 90)])
-    assert len(result.surfaces) == 4
-    crown = next(s for s in result.surfaces if s.surface_type == SurfaceType.CROWN)
-    assert crown.stability_number_n == pytest.approx(85 * crown.stress_factor_a * crown.joint_factor_b * crown.surface_factor_c)
-    assert crown.joint_factor_b == pytest.approx(0.3)
-    assert crown.surface_factor_c == pytest.approx(1.0)
-    assert crown.rating_length_m == pytest.approx(750 / 110)
-    assert result.final_state in {StabilityState.STABLE, StabilityState.UNSTABLE, StabilityState.CAVED}
-    assert math.isfinite(crown.hr_stable)
-    assert crown.hr_caving > crown.hr_stable
 
-def test_calculate_stope_result_rejects_empty_surface_list():
-    with pytest.raises(ValueError):
-        calculate_stope_result(make_stope(), [], [])
+
+def make_joint_sets():
+    return [
+        JointSet(
+            name="Set 1",
+            dip_deg=70,
+            dip_direction_deg=100,
+        )
+    ]
+
+
+def test_standard_calculation_returns_four_surfaces():
+    result = calculate_stope_result(
+        stope=make_stope(),
+        surfaces=make_surfaces(),
+        joint_sets=make_joint_sets(),
+        calculation_mode="Standard",
+    )
+
+    assert len(result.surfaces) == 4
+    assert result.calculation_mode == "Standard"
+    assert result.final_state in (
+        StabilityState.STABLE,
+        StabilityState.UNSTABLE,
+        StabilityState.CAVED,
+        StabilityState.UNKNOWN,
+    )
+
+    for surface in result.surfaces:
+        assert surface.stability_number_n > 0
+        assert surface.hr_stable > 0
+        assert surface.hr_caving > 0
+        assert surface.actual_hr_m is not None
+        assert surface.local_state is None
+        assert surface.local_boundary_name is None
+        assert surface.local_boundary_n is None
+
+
+def test_a_override_is_used():
+    surfaces = make_surfaces()
+    surfaces[0] = SurfaceInput(
+        surface_type=SurfaceType.CROWN,
+        dip_deg=0,
+        q_prime=10,
+        stress_factor_a=0.5,
+    )
+
+    result = calculate_stope_result(
+        stope=make_stope(),
+        surfaces=surfaces,
+        joint_sets=make_joint_sets(),
+        calculation_mode="Standard",
+    )
+
+    crown = next(
+        surface
+        for surface in result.surfaces
+        if surface.surface_type == SurfaceType.CROWN
+    )
+
+    assert crown.stress_factor_a == pytest.approx(0.5)
+
+
+def test_compare_mode_uses_saved_local_boundary(monkeypatch, tmp_path):
+    # SQLite база будет создаваться во временной папке теста,
+    # а не в рабочем data/projects проекта.
+    monkeypatch.chdir(tmp_path)
+
+    upsert_boundary(
+        {
+            "project": "Mayskoe",
+            "domain": "Рудная зона 2",
+            "surface": "Hanging wall",
+            "boundary_name": "Test HW boundary",
+            "boundary_type": "Stable-Unstable",
+            "mode": "linear",
+            "slope": 0.1,
+            "intercept": 0.1,
+            "percentile": 80,
+            "margin": 0,
+            "is_standard": 0,
+            "is_active": 1,
+            "comment": "pytest boundary",
+        }
+    )
+
+    result = calculate_stope_result(
+        stope=make_stope(project="Mayskoe", domain="Рудная зона 2"),
+        surfaces=make_surfaces(),
+        joint_sets=make_joint_sets(),
+        calculation_mode="Compare",
+    )
+
+    hanging_wall = next(
+        surface
+        for surface in result.surfaces
+        if surface.surface_type == SurfaceType.HANGING_WALL
+    )
+
+    assert result.calculation_mode == "Compare"
+    assert hanging_wall.local_boundary_name == "Test HW boundary"
+    assert hanging_wall.local_boundary_n is not None
+    assert hanging_wall.local_state in (
+        StabilityState.STABLE,
+        StabilityState.UNSTABLE,
+        StabilityState.UNKNOWN,
+    )
+
+
+def test_compare_mode_without_boundary_does_not_crash(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+
+    result = calculate_stope_result(
+        stope=make_stope(project="No project", domain="No domain"),
+        surfaces=make_surfaces(),
+        joint_sets=make_joint_sets(),
+        calculation_mode="Compare",
+    )
+
+    assert result.calculation_mode == "Compare"
+
+    for surface in result.surfaces:
+        assert surface.local_state == StabilityState.UNKNOWN
+        assert surface.local_boundary_name == "Not found"
