@@ -26,42 +26,15 @@ def calculate_surface_hydraulic_radius(surface_type: SurfaceType, stope) -> floa
     return (a * b) / (2 * (a + b))
 
 
-def calculate_boundary_n(
-    hydraulic_radius: float,
-    boundary: dict,
-) -> float:
-    mode = str(boundary.get("mode", "linear") or "linear").lower()
-
-    slope = float(boundary["slope"])
-    intercept = float(boundary["intercept"])
-
-    if hydraulic_radius <= 0:
-        raise ValueError("Hydraulic radius must be greater than zero.")
-
-    if mode == "power":
-        # Power curve:
-        # N = k * HR^a
-        # slope = a
-        # intercept = k
-        if intercept <= 0:
-            raise ValueError("Power curve coefficient k must be greater than zero.")
-
-        return intercept * (hydraulic_radius ** slope)
-
-    # Linear curve:
-    # N = a * HR + b
-    return slope * hydraulic_radius + intercept
-
-
-def assess_against_boundary(
+def assess_against_linear_boundary(
     stability_number_n: float,
     hydraulic_radius: float,
     boundary: dict,
 ) -> tuple[StabilityState, float]:
-    boundary_n = calculate_boundary_n(
-        hydraulic_radius=hydraulic_radius,
-        boundary=boundary,
-    )
+    slope = float(boundary["slope"])
+    intercept = float(boundary["intercept"])
+
+    boundary_n = slope * hydraulic_radius + intercept
 
     if boundary_n <= 0:
         return StabilityState.UNKNOWN, boundary_n
@@ -70,7 +43,6 @@ def assess_against_boundary(
         return StabilityState.STABLE, boundary_n
 
     return StabilityState.UNSTABLE, boundary_n
-
 
 
 def assess_surface_local(
@@ -93,7 +65,7 @@ def assess_surface_local(
     if boundary is None:
         return StabilityState.UNKNOWN, "Not found", None
 
-    local_state, boundary_n = assess_against_boundary(
+    local_state, boundary_n = assess_against_linear_boundary(
         stability_number_n=stability_number_n,
         hydraulic_radius=hydraulic_radius,
         boundary=boundary,

@@ -109,9 +109,6 @@ class StabilityGraphTab(ttk.Frame):
         self.boundary_name_var = tk.StringVar(value="Local boundary")
         self.boundary_slope_var = tk.StringVar(value="1.0")
         self.boundary_intercept_var = tk.StringVar(value="0.0")
-        self.boundary_mode_var = tk.StringVar(value="linear")
-        self.boundary_equation_var = tk.StringVar(value="Equation: N = a × HR + b")
-
         self.envelope_margin_var =  tk.StringVar(value="10")
         self.saved_boundary_var = tk.StringVar(value="")
         self.boundary_comment_var = tk.StringVar(value="")
@@ -254,64 +251,17 @@ class StabilityGraphTab(ttk.Frame):
             command=self.refresh_graph,
         ).grid(row=0, column=0, padx=6, pady=6, sticky="w")
 
-        ttk.Label(boundary_frame, text="Curve type").grid(
-            row=0, column=1, padx=6, pady=6, sticky="w"
-        )
+        ttk.Label(boundary_frame, text="Preset").grid(row=0, column=1, padx=6, pady=6, sticky="w")
 
-        self.boundary_mode_combo = ttk.Combobox(
+        self.boundary_preset_combo = ttk.Combobox(
             boundary_frame,
-            textvariable=self.boundary_mode_var,
-            values=["linear", "power"],
+            textvariable=self.boundary_preset_var,
+            values=list(LOCAL_BOUNDARY_PRESETS.keys()),
             state="readonly",
-            width=10,
+            width=18,
         )
-        self.boundary_mode_combo.grid(row=0, column=2, padx=6, pady=6, sticky="w")
-        self.boundary_mode_combo.bind(
-            "<<ComboboxSelected>>",
-            lambda _event: self.refresh_equation_label(),
-        )
-
-        ttk.Label(boundary_frame, text="Name").grid(
-            row=0, column=3, padx=6, pady=6, sticky="w"
-        )
-        ttk.Entry(
-            boundary_frame,
-            textvariable=self.boundary_name_var,
-            width=26,
-        ).grid(row=0, column=4, padx=6, pady=6, sticky="w")
-
-        ttk.Label(boundary_frame, text="a / slope").grid(
-            row=0, column=5, padx=6, pady=6, sticky="w"
-        )
-        ttk.Entry(
-            boundary_frame,
-            textvariable=self.boundary_slope_var,
-            width=10,
-        ).grid(row=0, column=6, padx=6, pady=6, sticky="w")
-
-        ttk.Label(boundary_frame, text="b / intercept").grid(
-            row=0, column=7, padx=6, pady=6, sticky="w"
-        )
-        ttk.Entry(
-            boundary_frame,
-            textvariable=self.boundary_intercept_var,
-            width=10,
-        ).grid(row=0, column=8, padx=6, pady=6, sticky="w")
-
-        ttk.Button(
-            boundary_frame,
-            text="Apply boundary",
-            command=self.apply_manual_boundary,
-        ).grid(row=0, column=9, padx=6, pady=6)
-
-        ttk.Label(
-            boundary_frame,
-            textvariable=self.boundary_equation_var,
-            foreground="#555555",
-        ).grid(row=1, column=0, columnspan=5, padx=6, pady=(0, 6), sticky="w")
-
-
-
+        self.boundary_preset_combo.grid(row=0, column=2, padx=6, pady=6, sticky="w")
+        self.boundary_preset_combo.bind("<<ComboboxSelected>>", lambda _event: self.apply_boundary_preset())
 
         ttk.Label(boundary_frame, text="Name").grid(row=0, column=3, padx=6, pady=6, sticky="w")
         ttk.Entry(
@@ -341,16 +291,46 @@ class StabilityGraphTab(ttk.Frame):
         ).grid(row=0, column=9, padx=6, pady=6)
 
 
-    
-
-        self.boundary_equation_var = tk.StringVar(value="Equation: N = a × HR + b")
+        ttk.Button(
+            boundary_frame,
+            text="Fit boundary from visible points",
+            command=self.fit_boundary_from_visible_points,
+        ).grid(row=0, column=10, padx=6, pady=6)
 
         ttk.Label(
             boundary_frame,
-            textvariable=self.boundary_equation_var,
+            text="Envelope margin, %",
+        ).grid(row=0, column=11, padx=6, pady=6, sticky="w")
+
+        ttk.Label(
+            boundary_frame,
+            text="Envelope percentile, %",
+        ).grid(row=1, column=11, padx=6, pady=6, sticky="w")
+
+        ttk.Entry(
+            boundary_frame,
+            textvariable=self.envelope_percentile_var,
+            width=8,
+        ).grid(row=1, column=12, padx=6, pady=6, sticky="w")
+
+        ttk.Entry(
+            boundary_frame,
+            textvariable=self.envelope_margin_var,
+            width=8,
+        ).grid(row=0, column=12, padx=6, pady=6, sticky="w")
+
+        ttk.Button(
+            boundary_frame,
+            text="Fit unsafe upper envelope",
+            command=self.fit_unsafe_upper_envelope,
+        ).grid(row=0, column=13, padx=6, pady=6)
+
+
+        ttk.Label(
+            boundary_frame,
+            text="Equation: N = a × HR + b",
             foreground="#555555",
-        ).grid(row=1, column=2, columnspan=4, padx=6, pady=(0, 6), sticky="w")
-        
+        ).grid(row=1, column=0, columnspan=5, padx=6, pady=(0, 6), sticky="w")
 
         ttk.Label(
             boundary_frame,
@@ -615,7 +595,6 @@ class StabilityGraphTab(ttk.Frame):
             self.load_active_boundary_for_current_filters()
 
 
-
     def load_active_boundary_for_current_filters(self):
         context = self._get_exact_curve_context()
 
@@ -639,10 +618,6 @@ class StabilityGraphTab(ttk.Frame):
         self.boundary_name_var.set(boundary.get("boundary_name", "Local boundary"))
         self.boundary_slope_var.set(str(boundary.get("slope", "1.0")))
         self.boundary_intercept_var.set(str(boundary.get("intercept", "0.0")))
-        self.boundary_mode_var.set(str(boundary.get("mode", "linear") or "linear"))
-        self.refresh_equation_label()
-
-
 
         if boundary.get("margin", "") not in ("", None):
             self.envelope_margin_var.set(str(boundary.get("margin", "")))
@@ -658,23 +633,11 @@ class StabilityGraphTab(ttk.Frame):
         self.saved_boundary_var.set(display_name)
 
 
-    def refresh_equation_label(self):
-        mode = self.boundary_mode_var.get().strip().lower() or "linear"
-
-        if mode == "power":
-            self.boundary_equation_var.set(
-                "Equation: N = k × HR^a | a = exponent, b/intercept = k"
-            )
-        else:
-            self.boundary_equation_var.set(
-                "Equation: N = a × HR + b"
-            )
 
 
     def _plot_local_boundary(self, points: list[dict]):
         slope = _safe_float(self.boundary_slope_var.get())
         intercept = _safe_float(self.boundary_intercept_var.get())
-        mode = self.boundary_mode_var.get().strip().lower() or "linear"
 
         if slope is None or intercept is None:
             messagebox.showerror(
@@ -684,27 +647,13 @@ class StabilityGraphTab(ttk.Frame):
             self.show_boundary_var.set(False)
             return
 
-        if mode == "power" and intercept <= 0:
-            messagebox.showerror(
-                "Boundary error",
-                "For power curve, intercept is coefficient k and must be greater than zero.",
-            )
-            self.show_boundary_var.set(False)
-            return
-
         x_min, x_max = self._get_boundary_x_range(points)
 
         if x_min <= 0 or x_max <= 0 or x_min >= x_max:
             return
 
-        x_values = np.linspace(x_min, x_max, 300)
-
-        if mode == "power":
-            y_values = intercept * (x_values ** slope)
-            equation_label = f"N = {intercept:g}×HR^{slope:g}"
-        else:
-            y_values = slope * x_values + intercept
-            equation_label = f"N = {slope:g}×HR + {intercept:g}"
+        x_values = np.linspace(x_min, x_max, 200)
+        y_values = slope * x_values + intercept
 
         valid_x = []
         valid_y = []
@@ -725,9 +674,8 @@ class StabilityGraphTab(ttk.Frame):
             linestyle="--",
             linewidth=2.0,
             color="black",
-            label=f"{label}: {equation_label}",
+            label=f"{label}: N = {slope:g}×HR + {intercept:g}",
         )
-
 
     def _get_boundary_x_range(self, points: list[dict]) -> tuple[float, float]:
         if points:
@@ -832,8 +780,6 @@ class StabilityGraphTab(ttk.Frame):
             self.boundary_name_var.set("Fitted local boundary")
             self.boundary_slope_var.set(f"{slope:.6g}")
             self.boundary_intercept_var.set(f"{intercept:.6g}")
-            self.boundary_mode_var.set("linear")
-            self.refresh_equation_label()
             self.show_boundary_var.set(True)
             self.boundary_preset_var.set("Manual")
             self.envelope_margin_var = tk.StringVar(value="10")
@@ -992,8 +938,6 @@ class StabilityGraphTab(ttk.Frame):
             self.boundary_name_var.set("Unsafe upper envelope")
             self.boundary_slope_var.set(f"{slope:.6g}")
             self.boundary_intercept_var.set(f"{intercept:.6g}")
-            self.boundary_mode_var.set("linear")
-            self.refresh_equation_label()
             self.show_boundary_var.set(True)
             self.boundary_preset_var.set("Manual")
 
@@ -1126,18 +1070,11 @@ class StabilityGraphTab(ttk.Frame):
     def _make_boundary_display_name(self, row: dict) -> str:
         active = "ACTIVE" if int(row.get("is_active", 0) or 0) == 1 else "inactive"
         boundary_type = row.get("boundary_type", "") or "Stable-Unstable"
-        mode = row.get("mode", "") or "linear"
         name = row.get("boundary_name", "") or "Unnamed boundary"
         slope = row.get("slope", "")
         intercept = row.get("intercept", "")
 
-        if str(mode).lower() == "power":
-            formula = f"k={intercept} a={slope}"
-        else:
-            formula = f"a={slope} b={intercept}"
-
-        return f"{active} | {boundary_type} | {mode} | {name} | {formula}"
-
+        return f"{active} | {boundary_type} | {name} | a={slope} b={intercept}"
 
 
     def _get_selected_boundary_row(self) -> dict | None:
@@ -1200,7 +1137,7 @@ class StabilityGraphTab(ttk.Frame):
             "surface": surface,
             "boundary_name": boundary_name,
             "boundary_type": "Stable-Unstable",
-            "mode": self.boundary_mode_var.get().strip().lower() or "linear",
+            "mode": "linear",
             "slope": slope,
             "intercept": intercept,
             "percentile": percentile,
@@ -1468,7 +1405,6 @@ class StabilityGraphTab(ttk.Frame):
     def apply_manual_boundary(self):
         slope = _safe_float(self.boundary_slope_var.get())
         intercept = _safe_float(self.boundary_intercept_var.get())
-        mode = self.boundary_mode_var.get().strip().lower() or "linear"
 
         if slope is None or intercept is None:
             messagebox.showerror(
@@ -1477,15 +1413,6 @@ class StabilityGraphTab(ttk.Frame):
             )
             return
 
-        if mode == "power" and intercept <= 0:
-            messagebox.showerror(
-                "Boundary error",
-                "For power curve, b/intercept is coefficient k and must be greater than zero.",
-            )
-            return
-
         self.show_boundary_var.set(True)
-        self.refresh_equation_label()
+        self.boundary_preset_var.set("Manual")
         self.refresh_graph(load_active_boundary=False)
-
-
