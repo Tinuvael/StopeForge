@@ -1,5 +1,6 @@
 import tkinter as tk
 from tkinter import ttk
+from pathlib import Path
 
 from gui.calculation_tab import CalculationTab
 from gui.project_overview_tab import ProjectOverviewTab
@@ -14,6 +15,12 @@ class StopeForgeApp(tk.Tk):
         self.title("StopeForge")
         self.geometry("1300x850")
         self.minsize(1100, 750)
+
+        icon_path = Path(__file__).resolve().parent.parent / "assets" / "icons" / "stopeforge_icon.ico"
+
+        if icon_path.exists():
+            self.iconbitmap(str(icon_path))
+
 
         self._build_ui()
 
@@ -38,7 +45,7 @@ class StopeForgeApp(tk.Tk):
 
 
         notebook.add(self.calculation_tab, text="Calculation")
-        notebook.add(self.project_overview_tab, text="Project Overview")
+        notebook.add(self.project_overview_tab, text="Calculation Log")
         notebook.add(self.case_histories_tab, text="Case Histories")
         notebook.add(self.graph_tab, text="Stability Graph")
 
