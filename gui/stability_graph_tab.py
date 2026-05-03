@@ -64,6 +64,14 @@ class StabilityGraphTab(ttk.Frame):
         self.boundary_slope_var = tk.StringVar(value="1.0")
         self.boundary_intercept_var = tk.StringVar(value="0.0")
         self.boundary_equation_var = tk.StringVar(value="Equation: N = a × HR + b")
+        self.point1_hr_var = tk.StringVar(value="")
+        self.point1_n_var = tk.StringVar(value="")
+        self.point2_hr_var = tk.StringVar(value="")
+        self.point2_n_var = tk.StringVar(value="")
+        self.edit_curve_points_var = tk.BooleanVar(value=False)
+        self.dragged_curve_point = None
+        self.curve_point_artists = []
+        self.frozen_axis_limits = None
         self.boundary_comment_var = tk.StringVar(value="")
         self.saved_boundary_var = tk.StringVar(value="")
         self.saved_boundaries: list[dict] = []
@@ -252,6 +260,16 @@ class StabilityGraphTab(ttk.Frame):
             foreground="#555555",
         ).grid(row=1, column=0, columnspan=5, padx=6, pady=(0, 6), sticky="w")
 
+
+        ttk.Checkbutton(
+            boundary_frame,
+            text="Edit points on graph",
+            variable=self.edit_curve_points_var,
+            command=self.on_edit_points_toggle,
+        ).grid(row=3, column=0, padx=6, pady=6, sticky="w")
+
+
+
         ttk.Label(
             boundary_frame,
             textvariable=self.visible_stats_var,
@@ -297,6 +315,12 @@ class StabilityGraphTab(ttk.Frame):
             command=self.delete_selected_boundary,
         ).grid(row=2, column=9, padx=6, pady=6)
 
+        ttk.Label(boundary_frame, text="Comment").grid(row=4, column=0, padx=6, pady=6, sticky="w")
+        ttk.Entry(
+            boundary_frame,
+            textvariable=self.boundary_comment_var,
+            width=120,
+        ).grid(row=4, column=1, columnspan=8, padx=6, pady=6, sticky="we")
         ttk.Label(boundary_frame, text="Comment").grid(row=3, column=0, padx=6, pady=6, sticky="w")
         ttk.Entry(
             boundary_frame,
@@ -312,6 +336,9 @@ class StabilityGraphTab(ttk.Frame):
         self.ax = self.figure.add_subplot(111)
 
         self.canvas = FigureCanvasTkAgg(self.figure, master=graph_frame)
+        self.canvas.mpl_connect("button_press_event", self.on_graph_mouse_press)
+        self.canvas.mpl_connect("motion_notify_event", self.on_graph_mouse_move)
+        self.canvas.mpl_connect("button_release_event", self.on_graph_mouse_release)
         self.canvas_widget = self.canvas.get_tk_widget()
         self.canvas_widget.pack(fill="both", expand=True)
 
@@ -474,6 +501,251 @@ class StabilityGraphTab(ttk.Frame):
         self.refresh_equation_label()
         self.refresh_graph(load_active_boundary=False)
 
+
+    def build_boundary_from_two_points(self):
+        hr1 = _safe_float(self.point1_hr_var.get())
+        n1 = _safe_float(self.point1_n_var.get())
+        hr2 = _safe_float(self.point2_hr_var.get())
+        n2 = _safe_float(self.point2_n_var.get())
+
+        mode = self.boundary_mode_var.get().strip().lower() or "linear"
+
+        if hr1 is None or n1 is None or hr2 is None or n2 is None:
+            messagebox.showerror(
+                "Two-point boundary error",
+                "Both points must have valid HR and N values.",
+            )
+            return
+
+        if hr1 <= 0 or hr2 <= 0 or n1 <= 0 or n2 <= 0:
+            messagebox.showerror(
+                "Two-point boundary error",
+                "HR and N values must be greater than zero.",
+            )
+            return
+
+        if abs(hr2 - hr1) < 1e-12:
+            messagebox.showerror(
+                "Two-point boundary error",
+                "Point 1 HR and Point 2 HR must be different.",
+            )
+            return
+
+        if mode == "power":
+            if abs(np.log(hr2 / hr1)) < 1e-12:
+                messagebox.showerror(
+                    "Two-point boundary error",
+                    "Cannot build power curve because HR ratio is too close to 1.",
+                )
+                return
+
+            slope = np.log(n2 / n1) / np.log(hr2 / hr1)
+            intercept = n1 / (hr1 ** slope)
+
+            if intercept <= 0:
+                messagebox.showerror(
+                    "Two-point boundary error",
+                    "Power coefficient k must be greater than zero.",
+                )
+                return
+
+        else:
+            slope = (n2 - n1) / (hr2 - hr1)
+            intercept = n1 - slope * hr1
+
+        self.boundary_slope_var.set(f"{slope:.6g}")
+        self.boundary_intercept_var.set(f"{intercept:.6g}")
+
+        if not self.boundary_name_var.get().strip() or self.boundary_name_var.get().strip() == "Local boundary":
+            self.boundary_name_var.set("Two-point local curve")
+
+        self.show_boundary_var.set(True)
+        self.refresh_equation_label()
+        self.refresh_graph(load_active_boundary=False)
+
+    def _get_curve_control_points(self):
+        p1_hr = _safe_float(self.point1_hr_var.get())
+        p1_n = _safe_float(self.point1_n_var.get())
+        p2_hr = _safe_float(self.point2_hr_var.get())
+        p2_n = _safe_float(self.point2_n_var.get())
+
+        points = []
+
+        if p1_hr is not None and p1_n is not None and p1_hr > 0 and p1_n > 0:
+            points.append((1, p1_hr, p1_n))
+
+        if p2_hr is not None and p2_n is not None and p2_hr > 0 and p2_n > 0:
+            points.append((2, p2_hr, p2_n))
+
+        return points
+
+
+    def _plot_curve_control_points(self):
+        self.curve_point_artists = []
+
+        if not self.edit_curve_points_var.get():
+            return
+
+        control_points = self._get_curve_control_points()
+
+        for point_number, hr, n_value in control_points:
+            artist = self.ax.scatter(
+                [hr],
+                [n_value],
+                s=140,
+                marker="D",
+                edgecolors="black",
+                linewidths=1.0,
+                label=f"P{point_number}",
+                zorder=10,
+            )
+
+            self.curve_point_artists.append((point_number, artist))
+
+            self.ax.annotate(
+                f"P{point_number}",
+                (hr, n_value),
+                textcoords="offset points",
+                xytext=(8, 8),
+                fontsize=9,
+                fontweight="bold",
+                zorder=11,
+            )
+
+
+    def _set_curve_point(self, point_number: int, hr: float, n_value: float):
+        if hr <= 0 or n_value <= 0:
+            return
+
+        if point_number == 1:
+            self.point1_hr_var.set(f"{hr:.6g}")
+            self.point1_n_var.set(f"{n_value:.6g}")
+        elif point_number == 2:
+            self.point2_hr_var.set(f"{hr:.6g}")
+            self.point2_n_var.set(f"{n_value:.6g}")
+
+
+    def _get_nearest_curve_point_number(self, event, max_pixel_distance: float = 18.0):
+        control_points = self._get_curve_control_points()
+
+        if not control_points:
+            return None
+
+        nearest_point_number = None
+        nearest_distance = None
+
+        mouse_x = event.x
+        mouse_y = event.y
+
+        for point_number, point_hr, point_n in control_points:
+            point_x, point_y = self.ax.transData.transform((point_hr, point_n))
+
+            distance = ((mouse_x - point_x) ** 2 + (mouse_y - point_y) ** 2) ** 0.5
+
+            if nearest_distance is None or distance < nearest_distance:
+                nearest_distance = distance
+                nearest_point_number = point_number
+
+        if nearest_distance is None:
+            return None
+
+        if nearest_distance > max_pixel_distance:
+            return None
+
+        return nearest_point_number
+
+
+    def _try_rebuild_curve_from_points(self):
+        p1_hr = _safe_float(self.point1_hr_var.get())
+        p1_n = _safe_float(self.point1_n_var.get())
+        p2_hr = _safe_float(self.point2_hr_var.get())
+        p2_n = _safe_float(self.point2_n_var.get())
+
+        if (
+            p1_hr is None or p1_n is None
+            or p2_hr is None or p2_n is None
+            or p1_hr <= 0 or p1_n <= 0
+            or p2_hr <= 0 or p2_n <= 0
+        ):
+            return
+
+        self.build_boundary_from_two_points()
+
+
+    def on_graph_mouse_press(self, event):
+        if not self.edit_curve_points_var.get():
+            return
+
+        if event.inaxes != self.ax:
+            return
+
+        if event.xdata is None or event.ydata is None:
+            return
+
+        hr = float(event.xdata)
+        n_value = float(event.ydata)
+
+        if hr <= 0 or n_value <= 0:
+            return
+
+        p1_hr = _safe_float(self.point1_hr_var.get())
+        p1_n = _safe_float(self.point1_n_var.get())
+        p2_hr = _safe_float(self.point2_hr_var.get())
+        p2_n = _safe_float(self.point2_n_var.get())
+
+        if p1_hr is None or p1_n is None or p1_hr <= 0 or p1_n <= 0:
+            self.dragged_curve_point = 1
+            self._set_curve_point(1, hr, n_value)
+            self.refresh_graph(load_active_boundary=False)
+            return
+
+        if p2_hr is None or p2_n is None or p2_hr <= 0 or p2_n <= 0:
+            self.dragged_curve_point = 2
+            self._set_curve_point(2, hr, n_value)
+            self._try_rebuild_curve_from_points()
+            return
+
+        self.dragged_curve_point = self._get_nearest_curve_point_number(event)
+
+        if self.dragged_curve_point is None:
+            return
+
+
+
+    def on_graph_mouse_move(self, event):
+        if not self.edit_curve_points_var.get():
+            return
+
+        if self.dragged_curve_point is None:
+            return
+
+        if event.inaxes != self.ax:
+            return
+
+        if event.xdata is None or event.ydata is None:
+            return
+
+        hr = float(event.xdata)
+        n_value = float(event.ydata)
+
+        if hr <= 0 or n_value <= 0:
+            return
+
+        self._set_curve_point(self.dragged_curve_point, hr, n_value)
+        self._try_rebuild_curve_from_points()
+
+
+    def on_graph_mouse_release(self, event):
+        self.dragged_curve_point = None
+
+
+
+    def refresh_graph(self, load_active_boundary: bool = True):
+        current_axis_limits = None
+
+        if self.edit_curve_points_var.get() and self.frozen_axis_limits is not None:
+            current_axis_limits = self.frozen_axis_limits
+
     def refresh_graph(self, load_active_boundary: bool = True):
         self.refresh_filter_lists()
 
@@ -531,6 +803,10 @@ class StabilityGraphTab(ttk.Frame):
         if self.show_boundary_var.get():
             self._plot_local_boundary(points)
 
+
+        self._plot_curve_control_points()
+
+
         if points or self.show_boundary_var.get():
             self.ax.legend(loc="best")
         else:
@@ -545,10 +821,20 @@ class StabilityGraphTab(ttk.Frame):
             )
 
         self.figure.tight_layout()
+
+        if current_axis_limits is not None:
+            x_limits, y_limits = current_axis_limits
+            self.ax.set_xlim(x_limits)
+            self.ax.set_ylim(y_limits)
+
         self.summary_var.set(
             f"Shown points: {len(points)} / Filtered rows: {len(rows)} | "
             f"States: {', '.join(sorted(plotted_states)) if plotted_states else 'None'}"
         )
+
+        self.canvas.draw()
+
+
         self.canvas.draw()
 
     def load_active_boundary_for_current_filters(self, show_message: bool = False):
@@ -875,3 +1161,14 @@ class StabilityGraphTab(ttk.Frame):
             messagebox.showinfo("Export complete", f"Graph was exported to:\n{output_path}")
         except Exception as error:
             messagebox.showerror("Export error", str(error))
+
+    def on_edit_points_toggle(self):
+        if self.edit_curve_points_var.get():
+            self.frozen_axis_limits = (
+                self.ax.get_xlim(),
+                self.ax.get_ylim(),
+            )
+        else:
+            self.frozen_axis_limits = None
+
+        self.refresh_graph(load_active_boundary=False)

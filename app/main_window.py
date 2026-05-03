@@ -45,7 +45,7 @@ class StopeForgeApp(tk.Tk):
 
 
         notebook.add(self.calculation_tab, text="Calculation")
-        notebook.add(self.project_overview_tab, text="Project Overview")
+        notebook.add(self.project_overview_tab, text="Calculation Log")
         notebook.add(self.case_histories_tab, text="Case Histories")
         notebook.add(self.graph_tab, text="Stability Graph")
 
