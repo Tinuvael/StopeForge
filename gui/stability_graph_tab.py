@@ -321,6 +321,12 @@ class StabilityGraphTab(ttk.Frame):
             textvariable=self.boundary_comment_var,
             width=120,
         ).grid(row=4, column=1, columnspan=8, padx=6, pady=6, sticky="we")
+        ttk.Label(boundary_frame, text="Comment").grid(row=3, column=0, padx=6, pady=6, sticky="w")
+        ttk.Entry(
+            boundary_frame,
+            textvariable=self.boundary_comment_var,
+            width=80,
+        ).grid(row=3, column=1, columnspan=8, padx=6, pady=6, sticky="ew")
 
     def _build_graph(self, parent):
         graph_frame = ttk.Frame(parent)
@@ -740,6 +746,7 @@ class StabilityGraphTab(ttk.Frame):
         if self.edit_curve_points_var.get() and self.frozen_axis_limits is not None:
             current_axis_limits = self.frozen_axis_limits
 
+    def refresh_graph(self, load_active_boundary: bool = True):
         self.refresh_filter_lists()
 
         if load_active_boundary:
@@ -827,6 +834,8 @@ class StabilityGraphTab(ttk.Frame):
 
         self.canvas.draw()
 
+
+        self.canvas.draw()
 
     def load_active_boundary_for_current_filters(self, show_message: bool = False):
         context = self._get_exact_curve_context()
