@@ -82,12 +82,12 @@ def assess_surface_local(
     db_path=DEFAULT_PROJECT_DB_PATH,
 ) -> tuple[StabilityState, str, float | None]:
     boundary = find_active_boundary_exact(
-    project=project,
-    domain=domain,
-    surface=surface,
-    boundary_type="Stable-Unstable",
-    db_path=db_path,
-)
+        project=project,
+        domain=domain,
+        surface=surface,
+        boundary_type="Stable-Unstable",
+        db_path=db_path,
+    )
 
 
     if boundary is None:

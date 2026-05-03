@@ -2,7 +2,7 @@ from pathlib import Path
 
 from openpyxl import load_workbook
 
-from core.case_store import CASE_FIELDS
+from db.case_repository import CASE_FIELDS
 
 
 HEADER_ALIASES = {

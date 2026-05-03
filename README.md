@@ -113,17 +113,19 @@ The `Stability Graph` tab displays case history points on an `HR–N` graph.
 Available actions:
 
 - filter points by project, domain, surface and observed state;
-- show local boundaries;
-- manually create local boundaries;
-- fit preliminary local boundaries from visible points;
-- save, load and delete local boundaries;
+- show local curves;
+- manually create linear and power curves;
+- save, load, activate, deactivate and delete local curves;
 - export the graph to PNG.
 
-Local boundaries are currently stored as linear functions:
+Local curves can currently be stored as either linear or power functions:
 
 ```text
-N = a × HR + b
+Linear: N = a × HR + b
+Power:  N = k × HR^a
 ```
+
+For power curves, the interface uses `a / slope` as the exponent and `b / intercept` as coefficient `k`.
 
 ---
 
@@ -232,13 +234,13 @@ Filter the case histories by:
 - domain;
 - surface.
 
-Create or fit a local boundary, then click:
+Create a local curve manually, then click:
 
 ```text
-Save boundary
+Save
 ```
 
-The saved boundary can later be used in `Compare` mode.
+The saved active curve can later be used in `Compare` mode.
 
 ---
 
