@@ -3,22 +3,63 @@ name: Build Desktop Apps
 on:
   workflow_dispatch:
   push:
-    tags:
-      - "v*"
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
 
 jobs:
+  tests:
+    name: Run tests
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run pytest
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          pytest
+
   build:
+    name: Build ${{ matrix.artifact_name }}
+    needs: tests
+
     strategy:
       fail-fast: false
       matrix:
         include:
           - os: windows-latest
             artifact_name: StopeForge-Windows
-            artifact_path: dist/StopeForge
+            smoke_command: .\dist\StopeForge\StopeForge.exe --smoke-test
+            archive_command: Compress-Archive -Path dist\StopeForge -DestinationPath StopeForge-Windows.zip -Force
+            archive_path: StopeForge-Windows.zip
 
           - os: macos-15-intel
             artifact_name: StopeForge-macOS-Intel
-            artifact_path: dist/StopeForge.app
+            smoke_command: ./dist/StopeForge.app/Contents/MacOS/StopeForge --smoke-test
+            archive_command: ditto -c -k --sequesterRsrc --keepParent dist/StopeForge.app StopeForge-macOS-Intel.zip
+            archive_path: StopeForge-macOS-Intel.zip
+
+          - os: macos-26
+            artifact_name: StopeForge-macOS-AppleSilicon
+            smoke_command: ./dist/StopeForge.app/Contents/MacOS/StopeForge --smoke-test
+            archive_command: ditto -c -k --sequesterRsrc --keepParent dist/StopeForge.app StopeForge-macOS-AppleSilicon.zip
+            archive_path: StopeForge-macOS-AppleSilicon.zip
 
     runs-on: ${{ matrix.os }}
 
@@ -37,20 +78,22 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run tests
-        env:
-          PYTHONPATH: ${{ github.workspace }}
-        run: |
-          pytest
-
       - name: Build app
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
           pyinstaller --noconfirm StopeForge.spec
 
-      - name: Upload artifact
+      - name: Smoke test packaged app
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: ${{ matrix.smoke_command }}
+
+      - name: Create zip archive
+        run: ${{ matrix.archive_command }}
+
+      - name: Upload zipped artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact_name }}
-          path: ${{ matrix.artifact_path }}
+          path: ${{ matrix.archive_path }}
