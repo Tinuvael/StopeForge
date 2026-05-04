@@ -8,6 +8,18 @@ from gui.case_histories_tab import CaseHistoriesTab
 from gui.stability_graph_tab import StabilityGraphTab
 
 
+def resource_path(relative_path: str) -> Path:
+    """
+    Works both in development and in PyInstaller bundle.
+    """
+    import sys
+
+    if hasattr(sys, "_MEIPASS"):
+        return Path(sys._MEIPASS) / relative_path
+
+    return Path(__file__).resolve().parents[1] / relative_path
+
+
 class StopeForgeApp(tk.Tk):
     def __init__(self):
         super().__init__()
@@ -19,7 +31,10 @@ class StopeForgeApp(tk.Tk):
         icon_path = Path(__file__).resolve().parent.parent / "assets" / "icons" / "stopeforge_icon.ico"
 
         if icon_path.exists():
-            self.iconbitmap(str(icon_path))
+            try:
+                self.iconbitmap(str(icon_path))
+            except tk.TclError:
+                pass
 
 
         self._build_ui()
@@ -37,12 +52,10 @@ class StopeForgeApp(tk.Tk):
             on_add_case_histories=self.case_histories_tab.add_from_current_result,
         )
 
-
         self.graph_tab = StabilityGraphTab(
             notebook,
             get_case_rows_callback=lambda: self.case_histories_tab.rows,
         )
-
 
         notebook.add(self.calculation_tab, text="Calculation")
         notebook.add(self.project_overview_tab, text="Calculation Log")

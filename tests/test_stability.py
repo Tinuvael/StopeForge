@@ -116,9 +116,7 @@ def test_a_override_is_used():
 
 
 def test_compare_mode_uses_saved_local_boundary(monkeypatch, tmp_path):
-    # SQLite база будет создаваться во временной папке теста,
-    # а не в рабочем data/projects проекта.
-    monkeypatch.chdir(tmp_path)
+    db_path = tmp_path / "test_project.sqlite"
 
     upsert_boundary(
         {
@@ -130,12 +128,13 @@ def test_compare_mode_uses_saved_local_boundary(monkeypatch, tmp_path):
             "mode": "linear",
             "slope": 0.1,
             "intercept": 0.1,
-            "percentile": 80,
-            "margin": 0,
+            "percentile": None,
+            "margin": None,
             "is_standard": 0,
             "is_active": 1,
             "comment": "pytest boundary",
-        }
+        },
+        db_path=db_path,
     )
 
     result = calculate_stope_result(
@@ -143,6 +142,7 @@ def test_compare_mode_uses_saved_local_boundary(monkeypatch, tmp_path):
         surfaces=make_surfaces(),
         joint_sets=make_joint_sets(),
         calculation_mode="Compare",
+        db_path=db_path,
     )
 
     hanging_wall = next(
@@ -159,6 +159,7 @@ def test_compare_mode_uses_saved_local_boundary(monkeypatch, tmp_path):
         StabilityState.UNSTABLE,
         StabilityState.UNKNOWN,
     )
+
 
 
 def test_compare_mode_without_boundary_does_not_crash(monkeypatch, tmp_path):

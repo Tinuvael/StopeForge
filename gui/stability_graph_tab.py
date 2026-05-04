@@ -213,6 +213,13 @@ class StabilityGraphTab(ttk.Frame):
             command=lambda: self.refresh_graph(load_active_boundary=False),
         ).grid(row=0, column=0, padx=6, pady=6, sticky="w")
 
+        ttk.Button(
+            boundary_frame,
+            text="Clear edit points",
+            command=self.clear_edit_points,
+        ).grid(row=3, column=10, padx=6, pady=6, sticky="w")
+
+
         ttk.Label(boundary_frame, text="Type").grid(row=0, column=1, padx=6, pady=6, sticky="w")
         self.boundary_mode_combo = ttk.Combobox(
             boundary_frame,
@@ -732,6 +739,21 @@ class StabilityGraphTab(ttk.Frame):
     def on_graph_mouse_release(self, event):
         self.dragged_curve_point = None
 
+    def clear_edit_points(self):
+        self.point1_hr_var.set("")
+        self.point1_n_var.set("")
+        self.point2_hr_var.set("")
+        self.point2_n_var.set("")
+
+        self.dragged_curve_point = None
+
+        if self.edit_curve_points_var.get():
+            self.frozen_axis_limits = (
+                self.ax.get_xlim(),
+                self.ax.get_ylim(),
+            )
+
+        self.refresh_graph(load_active_boundary=False)
 
 
     def refresh_graph(self, load_active_boundary: bool = True):

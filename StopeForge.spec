@@ -5,6 +5,7 @@ import sys
 
 
 project_root = Path.cwd()
+icon_path = project_root / "assets" / "icons" / "stopeforge_icon.ico"
 
 datas = []
 
@@ -47,7 +48,7 @@ exe = EXE(
     upx=True,
     console=False,
     disable_windowed_traceback=False,
-    icon="assets/icon.ico" if (project_root / "assets" / "icon.ico").exists() else None,
+    icon=str(icon_path) if icon_path.exists() else None,
 )
 
 
@@ -67,6 +68,6 @@ if sys.platform == "darwin":
     app = BUNDLE(
         coll,
         name="StopeForge.app",
-        icon="assets/icon.ico" if (project_root / "assets" / "icon.ico").exists() else None,
+        icon=str(icon_path) if icon_path.exists() else None,
         bundle_identifier="com.stopeforge.app",
     )
