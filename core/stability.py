@@ -21,6 +21,7 @@ from core.models import (
     SurfaceType,
 )
 
+from db.connection import DEFAULT_PROJECT_DB_PATH
 
 def calculate_stability_number(
     q_prime: float,
@@ -196,6 +197,7 @@ def calculate_stope_result(
     surfaces: list[SurfaceInput],
     joint_sets: list[JointSet],
     calculation_mode: str = "Standard",
+    db_path=DEFAULT_PROJECT_DB_PATH,
 ) -> StopeResult:
 
     auto_stress_factor_a = calculate_stress_factor_a(
@@ -311,12 +313,13 @@ def calculate_stope_result(
 
         if calculation_mode == "Compare":
             local_state, local_boundary_name, local_boundary_n = assess_surface_local(
-                project=stope.project_name,
-                domain=stope.domain_name,
-                surface=surface.surface_type.value,
-                stability_number_n=stability_number_n,
-                hydraulic_radius=actual_hr,
-            )
+            project=stope.project_name,
+            domain=stope.domain_name,
+            surface=surface.surface_type.value,
+            stability_number_n=stability_number_n,
+            hydraulic_radius=actual_hr,
+            db_path=db_path,
+        )
 
 
         surface_results.append(
