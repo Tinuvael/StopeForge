@@ -59,6 +59,7 @@ class StabilityGraphTab(ttk.Frame):
         self.show_labels_var = tk.BooleanVar(value=False)
 
         self.show_boundary_var = tk.BooleanVar(value=False)
+        self.show_inactive_curves_var = tk.BooleanVar(value=False)
         self.boundary_name_var = tk.StringVar(value="Local boundary")
         self.boundary_mode_var = tk.StringVar(value="linear")
         self.boundary_slope_var = tk.StringVar(value="1.0")
@@ -212,6 +213,14 @@ class StabilityGraphTab(ttk.Frame):
             variable=self.show_boundary_var,
             command=lambda: self.refresh_graph(load_active_boundary=False),
         ).grid(row=0, column=0, padx=6, pady=6, sticky="w")
+
+        ttk.Checkbutton(
+            boundary_frame,
+            text="Show inactive curves",
+            variable=self.show_inactive_curves_var,
+            command=self.refresh_graph,
+        ).grid(row=3, column=11, padx=6, pady=6, sticky="w")
+
 
         ttk.Button(
             boundary_frame,
@@ -815,11 +824,13 @@ class StabilityGraphTab(ttk.Frame):
                             fontsize=8,
                         )
 
+        self._plot_saved_inactive_curves(points)
+
         if self.show_boundary_var.get():
             self._plot_local_boundary(points)
 
-
         self._plot_curve_control_points()
+
 
 
         if points or self.show_boundary_var.get():
@@ -912,6 +923,79 @@ class StabilityGraphTab(ttk.Frame):
             color="black",
             label=f"{label}: {equation_label}",
         )
+
+    def _plot_saved_inactive_curves(self, points: list[dict]):
+        if not self.show_inactive_curves_var.get():
+            return
+
+        context = self._get_exact_curve_context()
+
+        if context is None:
+            return
+
+        project, domain, surface = context
+
+        saved_curves = list_boundaries_exact(
+            project=project,
+            domain=domain,
+            surface=surface,
+            boundary_type="Stable-Unstable",
+            db_path=self.database_path,
+            active_only=False,
+        )
+
+        x_min, x_max = self._get_boundary_x_range(points)
+
+        if x_min <= 0 or x_max <= 0 or x_min >= x_max:
+            return
+
+        x_values = np.linspace(x_min, x_max, 300)
+
+        for row in saved_curves:
+            is_active = int(row.get("is_active", 0) or 0) == 1
+
+            if is_active:
+                continue
+
+            slope = _safe_float(row.get("slope"))
+            intercept = _safe_float(row.get("intercept"))
+            mode = str(row.get("mode", "linear") or "linear").strip().lower()
+            name = row.get("boundary_name", "") or "Inactive curve"
+
+            if slope is None or intercept is None:
+                continue
+
+            if mode == "power":
+                if intercept <= 0:
+                    continue
+
+                y_values = intercept * (x_values ** slope)
+                equation_label = f"{name}: N = {intercept:g}×HR^{slope:g}"
+            else:
+                y_values = slope * x_values + intercept
+                equation_label = f"{name}: N = {slope:g}×HR + {intercept:g}"
+
+            valid_x = []
+            valid_y = []
+
+            for x, y in zip(x_values, y_values):
+                if y > 0:
+                    valid_x.append(x)
+                    valid_y.append(y)
+
+            if not valid_x:
+                continue
+
+            self.ax.plot(
+                valid_x,
+                valid_y,
+                linestyle=":",
+                linewidth=1.2,
+                color="gray",
+                alpha=0.7,
+                label=equation_label,
+            )
+
 
     def _get_boundary_x_range(self, points: list[dict]) -> tuple[float, float]:
         if points:
