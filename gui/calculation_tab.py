@@ -268,7 +268,7 @@ class CalculationTab(ttk.Frame):
 
         ttk.Button(
             frame,
-            text="Save to Project Overview",
+            text="Save to Calculation Log",
             command=self.save_to_project_overview,
         ).pack(side="left", padx=(0, 8))
 
@@ -525,7 +525,7 @@ class CalculationTab(ttk.Frame):
         if self.on_save_result is None:
             messagebox.showerror(
                 "Save error",
-                "Project Overview tab is not connected.",
+                "Calculation Log tab is not connected.",
             )
             return
 
@@ -535,7 +535,7 @@ class CalculationTab(ttk.Frame):
 
         messagebox.showinfo(
             "Saved",
-            "Calculation result was saved to Project Overview.",
+            "Calculation result was saved to Calculation Log.",
         )
     
     def export_current_calculation(self):
