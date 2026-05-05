@@ -1,75 +1,199 @@
-from db.boundary_repository import find_active_boundary_exact
+from pathlib import Path
+from typing import Any
+
+from core.models import StabilityState
 from db.connection import DEFAULT_PROJECT_DB_PATH
-from core.models import SurfaceType, StabilityState
+from db.boundary_repository import find_active_boundary_exact
 
 
-def calculate_surface_hydraulic_radius(surface_type: SurfaceType, stope) -> float:
-    height = stope.stope_height_m
-    width = stope.stope_width_m
-    span = stope.stope_span_m
+def _safe_float(value):
+    try:
+        if value is None:
+            return None
 
-    if surface_type == SurfaceType.CROWN:
-        a = width
-        b = span
-    elif surface_type in (SurfaceType.HANGING_WALL, SurfaceType.FOOTWALL):
-        a = height
-        b = span
-    elif surface_type == SurfaceType.END_WALL:
-        a = height
-        b = width
-    else:
-        raise ValueError(f"Unknown surface type: {surface_type}")
+        text = str(value).strip().replace(",", ".")
 
-    if a <= 0 or b <= 0:
-        raise ValueError("Surface dimensions must be greater than zero.")
+        if text == "":
+            return None
 
-    return (a * b) / (2 * (a + b))
+        return float(text)
+
+    except Exception:
+        return None
+
+
+def _get_boundary_float(boundary: dict, keys: list[str]) -> float | None:
+    for key in keys:
+        if key in boundary:
+            value = _safe_float(boundary.get(key))
+
+            if value is not None:
+                return value
+
+    return None
 
 
 def calculate_boundary_n(
-    hydraulic_radius: float,
-    boundary: dict,
-) -> float:
-    mode = str(boundary.get("mode", "linear") or "linear").lower()
+    first,
+    second=None,
+    third=None,
+    mode: str = "linear",
+) -> float | None:
+    """
+    Calculate boundary N.
 
-    slope = float(boundary["slope"])
-    intercept = float(boundary["intercept"])
+    Supported call styles:
 
-    if hydraulic_radius <= 0:
-        raise ValueError("Hydraulic radius must be greater than zero.")
+    Current test/UI style:
+        calculate_boundary_n(hydraulic_radius, boundary_dict)
 
-    if mode == "power":
-        # Power curve:
+    Alternative internal style:
+        calculate_boundary_n(boundary_dict, hydraulic_radius)
+
+    Old numeric style:
+        calculate_boundary_n(slope, intercept, hydraulic_radius)
+        calculate_boundary_n(slope, intercept, hydraulic_radius, mode="power")
+    """
+
+    # Style 1:
+    # calculate_boundary_n(hr, boundary_dict)
+    if isinstance(second, dict):
+        hr = _safe_float(first)
+        boundary = second
+
+        slope = _safe_float(boundary.get("slope"))
+        intercept = _safe_float(boundary.get("intercept"))
+        curve_mode = str(boundary.get("mode", "linear") or "linear").strip().lower()
+
+    # Style 2:
+    # calculate_boundary_n(boundary_dict, hr)
+    elif isinstance(first, dict):
+        boundary = first
+        hr = _safe_float(second)
+
+        slope = _safe_float(boundary.get("slope"))
+        intercept = _safe_float(boundary.get("intercept"))
+        curve_mode = str(boundary.get("mode", "linear") or "linear").strip().lower()
+
+    # Style 3:
+    # calculate_boundary_n(slope, intercept, hr)
+    else:
+        slope = _safe_float(first)
+        intercept = _safe_float(second)
+        hr = _safe_float(third)
+        curve_mode = str(mode or "linear").strip().lower()
+
+    if slope is None or intercept is None or hr is None:
+        return None
+
+    if hr <= 0:
+        return None
+
+    if curve_mode == "power":
         # N = k * HR^a
         # slope = a
         # intercept = k
         if intercept <= 0:
             raise ValueError("Power curve coefficient k must be greater than zero.")
 
-        return intercept * (hydraulic_radius ** slope)
+        boundary_n = intercept * (hr ** slope)
 
-    # Linear curve:
-    # N = a * HR + b
-    return slope * hydraulic_radius + intercept
-
-
-def assess_against_boundary(
-    stability_number_n: float,
-    hydraulic_radius: float,
-    boundary: dict,
-) -> tuple[StabilityState, float]:
-    boundary_n = calculate_boundary_n(
-        hydraulic_radius=hydraulic_radius,
-        boundary=boundary,
-    )
+    else:
+        # N = a * HR + b
+        boundary_n = slope * hr + intercept
 
     if boundary_n <= 0:
-        return StabilityState.UNKNOWN, boundary_n
+        return None
 
-    if stability_number_n >= boundary_n:
-        return StabilityState.STABLE, boundary_n
+    return float(boundary_n)
 
-    return StabilityState.UNSTABLE, boundary_n
+
+
+
+
+
+def _get_first_valid_float(obj, field_names: list[str]) -> float | None:
+    for field_name in field_names:
+        value = getattr(obj, field_name, None)
+        parsed = _safe_float(value)
+
+        if parsed is not None:
+            return parsed
+
+    return None
+
+
+def calculate_surface_hydraulic_radius(surface_type, stope) -> float:
+    """
+    Calculate hydraulic radius for stope surface.
+
+    HR = Area / Perimeter
+
+    Crown / Back:
+        width x span
+
+    Hanging wall / Footwall:
+        height x span
+
+    End wall:
+        height x width
+    """
+
+    surface_name = getattr(surface_type, "value", str(surface_type))
+
+    height = _get_first_valid_float(
+        stope,
+        [
+            "stope_height_m",
+            "height_m",
+            "height",
+        ],
+    )
+
+    width = _get_first_valid_float(
+        stope,
+        [
+            "stope_width_m",
+            "width_m",
+            "ore_thickness_m",
+            "width",
+        ],
+    )
+
+    span = _get_first_valid_float(
+        stope,
+        [
+            "stope_span_m",
+            "span_m",
+            "strike_length_m",
+            "span",
+        ],
+    )
+
+    if height is None or width is None or span is None:
+        raise ValueError("Stope height, width and span must be valid numbers.")
+
+    if height <= 0 or width <= 0 or span <= 0:
+        raise ValueError("Stope height, width and span must be greater than zero.")
+
+    if surface_name in ("Crown", "Back", "Crown / Back"):
+        a = width
+        b = span
+    elif surface_name in ("Hanging wall", "Footwall"):
+        a = height
+        b = span
+    elif surface_name == "End wall":
+        a = height
+        b = width
+    else:
+        a = height
+        b = span
+
+    area = a * b
+    perimeter = 2.0 * (a + b)
+
+    return area / perimeter
+
 
 
 
@@ -79,9 +203,27 @@ def assess_surface_local(
     surface: str,
     stability_number_n: float,
     hydraulic_radius: float,
-    db_path=DEFAULT_PROJECT_DB_PATH,
-) -> tuple[StabilityState, str, float | None]:
-    boundary = find_active_boundary_exact(
+    db_path: str | Path = DEFAULT_PROJECT_DB_PATH,
+) -> tuple[StabilityState, str | None, float | None]:
+    """
+    Assess surface using active local curves.
+
+    Priority:
+    1. Stable-Unstable boundary
+    2. Unstable-Caved boundary
+
+    Returned tuple:
+    - local stability state
+    - boundary name used for the final decision
+    - boundary N used for the final decision
+    """
+    actual_n = _safe_float(stability_number_n)
+    actual_hr = _safe_float(hydraulic_radius)
+
+    if actual_n is None or actual_hr is None:
+        return StabilityState.UNKNOWN, None, None
+
+    stable_unstable_boundary = find_active_boundary_exact(
         project=project,
         domain=domain,
         surface=surface,
@@ -89,16 +231,74 @@ def assess_surface_local(
         db_path=db_path,
     )
 
-
-    if boundary is None:
-        return StabilityState.UNKNOWN, "Not found", None
-
-    local_state, boundary_n = assess_against_boundary(
-        stability_number_n=stability_number_n,
-        hydraulic_radius=hydraulic_radius,
-        boundary=boundary,
+    unstable_caved_boundary = find_active_boundary_exact(
+        project=project,
+        domain=domain,
+        surface=surface,
+        boundary_type="Unstable-Caved",
+        db_path=db_path,
     )
 
-    boundary_name = boundary.get("boundary_name", "Local boundary")
+    stable_unstable_n = calculate_boundary_n(
+        stable_unstable_boundary,
+        actual_hr,
+    )
 
-    return local_state, boundary_name, boundary_n
+    unstable_caved_n = calculate_boundary_n(
+        unstable_caved_boundary,
+        actual_hr,
+    )
+
+    # Both boundaries exist.
+    if stable_unstable_n is not None and unstable_caved_n is not None:
+        if actual_n >= stable_unstable_n:
+            return (
+                StabilityState.STABLE,
+                stable_unstable_boundary.get("boundary_name"),
+                stable_unstable_n,
+            )
+
+        if actual_n < unstable_caved_n:
+            return (
+                StabilityState.CAVED,
+                unstable_caved_boundary.get("boundary_name"),
+                unstable_caved_n,
+            )
+
+        return (
+            StabilityState.UNSTABLE,
+            stable_unstable_boundary.get("boundary_name"),
+            stable_unstable_n,
+        )
+
+    # Only Stable-Unstable boundary exists.
+    if stable_unstable_n is not None:
+        if actual_n >= stable_unstable_n:
+            return (
+                StabilityState.STABLE,
+                stable_unstable_boundary.get("boundary_name"),
+                stable_unstable_n,
+            )
+
+        return (
+            StabilityState.UNSTABLE,
+            stable_unstable_boundary.get("boundary_name"),
+            stable_unstable_n,
+        )
+
+    # Only Unstable-Caved boundary exists.
+    if unstable_caved_n is not None:
+        if actual_n < unstable_caved_n:
+            return (
+                StabilityState.CAVED,
+                unstable_caved_boundary.get("boundary_name"),
+                unstable_caved_n,
+            )
+
+        return (
+            StabilityState.UNSTABLE,
+            unstable_caved_boundary.get("boundary_name"),
+            unstable_caved_n,
+        )
+
+    return StabilityState.UNKNOWN, "Not found", None

@@ -59,8 +59,10 @@ class StabilityGraphTab(ttk.Frame):
         self.show_labels_var = tk.BooleanVar(value=False)
 
         self.show_boundary_var = tk.BooleanVar(value=False)
+        self.show_inactive_curves_var = tk.BooleanVar(value=False)
         self.boundary_name_var = tk.StringVar(value="Local boundary")
         self.boundary_mode_var = tk.StringVar(value="linear")
+        self.boundary_type_var = tk.StringVar(value="Stable-Unstable")
         self.boundary_slope_var = tk.StringVar(value="1.0")
         self.boundary_intercept_var = tk.StringVar(value="0.0")
         self.boundary_equation_var = tk.StringVar(value="Equation: N = a × HR + b")
@@ -206,6 +208,7 @@ class StabilityGraphTab(ttk.Frame):
         boundary_frame = ttk.LabelFrame(parent, text="Local Curve")
         boundary_frame.pack(fill="x", pady=(0, 8))
 
+        # Row 0: current editable curve controls
         ttk.Checkbutton(
             boundary_frame,
             text="Show curve",
@@ -213,14 +216,10 @@ class StabilityGraphTab(ttk.Frame):
             command=lambda: self.refresh_graph(load_active_boundary=False),
         ).grid(row=0, column=0, padx=6, pady=6, sticky="w")
 
-        ttk.Button(
-            boundary_frame,
-            text="Clear edit points",
-            command=self.clear_edit_points,
-        ).grid(row=3, column=10, padx=6, pady=6, sticky="w")
+        ttk.Label(boundary_frame, text="Type").grid(
+            row=0, column=1, padx=6, pady=6, sticky="w"
+        )
 
-
-        ttk.Label(boundary_frame, text="Type").grid(row=0, column=1, padx=6, pady=6, sticky="w")
         self.boundary_mode_combo = ttk.Combobox(
             boundary_frame,
             textvariable=self.boundary_mode_var,
@@ -234,56 +233,77 @@ class StabilityGraphTab(ttk.Frame):
             lambda _event: self.apply_manual_boundary(),
         )
 
-        ttk.Label(boundary_frame, text="Name").grid(row=0, column=3, padx=6, pady=6, sticky="w")
+        ttk.Label(boundary_frame, text="Boundary").grid(
+            row=0, column=3, padx=6, pady=6, sticky="w"
+        )
+
+        self.boundary_type_combo = ttk.Combobox(
+            boundary_frame,
+            textvariable=self.boundary_type_var,
+            values=["Stable-Unstable", "Unstable-Caved"],
+            state="readonly",
+            width=18,
+        )
+        self.boundary_type_combo.grid(row=0, column=4, padx=6, pady=6, sticky="w")
+        self.boundary_type_combo.bind(
+            "<<ComboboxSelected>>",
+            lambda _event: self.on_boundary_type_changed(),
+        )
+
+        ttk.Label(boundary_frame, text="Name").grid(
+            row=0, column=5, padx=6, pady=6, sticky="w"
+        )
+
         ttk.Entry(
             boundary_frame,
             textvariable=self.boundary_name_var,
             width=24,
-        ).grid(row=0, column=4, padx=6, pady=6, sticky="w")
+        ).grid(row=0, column=6, padx=6, pady=6, sticky="w")
 
-        ttk.Label(boundary_frame, text="a / slope").grid(row=0, column=5, padx=6, pady=6, sticky="w")
+        ttk.Label(boundary_frame, text="a / slope").grid(
+            row=0, column=7, padx=6, pady=6, sticky="w"
+        )
+
         ttk.Entry(
             boundary_frame,
             textvariable=self.boundary_slope_var,
             width=10,
-        ).grid(row=0, column=6, padx=6, pady=6, sticky="w")
+        ).grid(row=0, column=8, padx=6, pady=6, sticky="w")
 
-        ttk.Label(boundary_frame, text="b / intercept").grid(row=0, column=7, padx=6, pady=6, sticky="w")
+        ttk.Label(boundary_frame, text="b / intercept").grid(
+            row=0, column=9, padx=6, pady=6, sticky="w"
+        )
+
         ttk.Entry(
             boundary_frame,
             textvariable=self.boundary_intercept_var,
             width=10,
-        ).grid(row=0, column=8, padx=6, pady=6, sticky="w")
+        ).grid(row=0, column=10, padx=6, pady=6, sticky="w")
 
         ttk.Button(
             boundary_frame,
             text="Apply curve",
             command=self.apply_manual_boundary,
-        ).grid(row=0, column=9, padx=6, pady=6)
+        ).grid(row=0, column=11, padx=6, pady=6)
 
+        # Row 1: equation and visible stats
         ttk.Label(
             boundary_frame,
             textvariable=self.boundary_equation_var,
             foreground="#555555",
         ).grid(row=1, column=0, columnspan=5, padx=6, pady=(0, 6), sticky="w")
 
-
-        ttk.Checkbutton(
-            boundary_frame,
-            text="Edit points on graph",
-            variable=self.edit_curve_points_var,
-            command=self.on_edit_points_toggle,
-        ).grid(row=3, column=0, padx=6, pady=6, sticky="w")
-
-
-
         ttk.Label(
             boundary_frame,
             textvariable=self.visible_stats_var,
             foreground="#555555",
-        ).grid(row=1, column=5, columnspan=5, padx=6, pady=(0, 6), sticky="w")
+        ).grid(row=1, column=5, columnspan=7, padx=6, pady=(0, 6), sticky="w")
 
-        ttk.Label(boundary_frame, text="Saved curve").grid(row=2, column=0, padx=6, pady=6, sticky="w")
+        # Row 2: saved curves
+        ttk.Label(boundary_frame, text="Saved curve").grid(
+            row=2, column=0, padx=6, pady=6, sticky="w"
+        )
+
         self.saved_boundary_combo = ttk.Combobox(
             boundary_frame,
             textvariable=self.saved_boundary_var,
@@ -322,12 +342,41 @@ class StabilityGraphTab(ttk.Frame):
             command=self.delete_selected_boundary,
         ).grid(row=2, column=9, padx=6, pady=6)
 
-        ttk.Label(boundary_frame, text="Comment").grid(row=4, column=0, padx=6, pady=6, sticky="w")
+        # Row 3: graph edit tools
+        ttk.Checkbutton(
+            boundary_frame,
+            text="Edit points on graph",
+            variable=self.edit_curve_points_var,
+            command=self.on_edit_points_toggle,
+        ).grid(row=3, column=0, padx=6, pady=6, sticky="w")
+
+        ttk.Button(
+            boundary_frame,
+            text="Clear edit points",
+            command=self.clear_edit_points,
+        ).grid(row=3, column=1, padx=6, pady=6, sticky="w")
+
+        ttk.Checkbutton(
+            boundary_frame,
+            text="Show inactive curves",
+            variable=self.show_inactive_curves_var,
+            command=self.refresh_graph,
+        ).grid(row=3, column=2, padx=6, pady=6, sticky="w")
+
+        # Row 4: comment
+        ttk.Label(boundary_frame, text="Comment").grid(
+            row=4, column=0, padx=6, pady=6, sticky="w"
+        )
+
         ttk.Entry(
             boundary_frame,
             textvariable=self.boundary_comment_var,
             width=120,
-        ).grid(row=4, column=1, columnspan=8, padx=6, pady=6, sticky="we")
+        ).grid(row=4, column=1, columnspan=10, padx=6, pady=6, sticky="we")
+
+        # Let comment field stretch a bit
+        boundary_frame.columnconfigure(6, weight=1)
+
 
     def _build_graph(self, parent):
         graph_frame = ttk.Frame(parent)
@@ -416,22 +465,29 @@ class StabilityGraphTab(ttk.Frame):
             return
 
         project, domain, surface = context
+        boundary_type = self.boundary_type_var.get() or "Stable-Unstable"
+
         self.saved_boundaries = list_boundaries_exact(
             project=project,
             domain=domain,
             surface=surface,
-            boundary_type="Stable-Unstable",
+            boundary_type=boundary_type,
             db_path=self.database_path,
             active_only=False,
         )
 
-        display_values = [self._make_boundary_display_name(row) for row in self.saved_boundaries]
+        display_values = [
+            self._make_boundary_display_name(row)
+            for row in self.saved_boundaries
+        ]
+
         self.saved_boundary_combo["values"] = display_values
 
-        active_row = next(
-            (row for row in self.saved_boundaries if int(row.get("is_active", 0) or 0) == 1),
-            None,
-        )
+        active_row = None
+        for row in self.saved_boundaries:
+            if int(row.get("is_active", 0) or 0) == 1:
+                active_row = row
+                break
 
         if active_row is not None:
             self.saved_boundary_var.set(self._make_boundary_display_name(active_row))
@@ -439,6 +495,7 @@ class StabilityGraphTab(ttk.Frame):
             self.saved_boundary_var.set(display_values[0])
         else:
             self.saved_boundary_var.set("")
+
 
     def refresh_equation_label(self):
         mode = self.boundary_mode_var.get().strip().lower() or "linear"
@@ -815,11 +872,16 @@ class StabilityGraphTab(ttk.Frame):
                             fontsize=8,
                         )
 
+        self._plot_saved_inactive_curves(points)
+
+        self._plot_active_saved_boundaries(points)
+
         if self.show_boundary_var.get():
             self._plot_local_boundary(points)
 
-
         self._plot_curve_control_points()
+
+
 
 
         if points or self.show_boundary_var.get():
@@ -849,8 +911,13 @@ class StabilityGraphTab(ttk.Frame):
 
         self.canvas.draw()
 
+        self.refresh_saved_boundaries()
 
-    def load_active_boundary_for_current_filters(self, show_message: bool = False):
+        if load_active_boundary:
+            self.load_active_boundary_for_current_filters(show_message=False)
+
+
+    def load_active_boundary_for_current_filters(self, show_message=False):
         context = self._get_exact_curve_context()
 
         if context is None:
@@ -858,24 +925,38 @@ class StabilityGraphTab(ttk.Frame):
             return
 
         project, domain, surface = context
+
+        boundary_type = self.boundary_type_var.get() or "Stable-Unstable"
+
         boundary = find_active_boundary_exact(
             project=project,
             domain=domain,
             surface=surface,
-            boundary_type="Stable-Unstable",
+            boundary_type=boundary_type,
             db_path=self.database_path,
         )
 
         if boundary is None:
-            self.show_boundary_var.set(False)
+            if show_message:
+                messagebox.showinfo(
+                    "No active curve",
+                    f"No active {boundary_type} curve found for current Project / Domain / Surface.",
+                )
             return
 
-        self._load_boundary_fields(boundary)
-        self.show_boundary_var.set(True)
-        self.saved_boundary_var.set(self._make_boundary_display_name(boundary))
+        self.boundary_name_var.set(boundary.get("boundary_name", "Local boundary"))
+        self.boundary_mode_var.set(str(boundary.get("mode", "linear") or "linear"))
+        self.boundary_slope_var.set(str(boundary.get("slope", "1.0")))
+        self.boundary_intercept_var.set(str(boundary.get("intercept", "0.0")))
+        self.boundary_comment_var.set(boundary.get("comment", ""))
 
-        if show_message:
-            messagebox.showinfo("Curve loaded", "Active curve was loaded for current filters.")
+        self.show_boundary_var.set(True)
+
+        display_name = self._make_boundary_display_name(boundary)
+        self.saved_boundary_var.set(display_name)
+
+        self.refresh_equation_label()
+
 
     def _plot_local_boundary(self, points: list[dict]):
         slope = _safe_float(self.boundary_slope_var.get())
@@ -912,6 +993,79 @@ class StabilityGraphTab(ttk.Frame):
             color="black",
             label=f"{label}: {equation_label}",
         )
+
+    def _plot_saved_inactive_curves(self, points: list[dict]):
+        if not self.show_inactive_curves_var.get():
+            return
+
+        context = self._get_exact_curve_context()
+
+        if context is None:
+            return
+
+        project, domain, surface = context
+
+        saved_curves = list_boundaries_exact(
+            project=project,
+            domain=domain,
+            surface=surface,
+            boundary_type=self.boundary_type_var.get(),
+            db_path=self.database_path,
+            active_only=False,
+        )
+
+        x_min, x_max = self._get_boundary_x_range(points)
+
+        if x_min <= 0 or x_max <= 0 or x_min >= x_max:
+            return
+
+        x_values = np.linspace(x_min, x_max, 300)
+
+        for row in saved_curves:
+            is_active = int(row.get("is_active", 0) or 0) == 1
+
+            if is_active:
+                continue
+
+            slope = _safe_float(row.get("slope"))
+            intercept = _safe_float(row.get("intercept"))
+            mode = str(row.get("mode", "linear") or "linear").strip().lower()
+            name = row.get("boundary_name", "") or "Inactive curve"
+
+            if slope is None or intercept is None:
+                continue
+
+            if mode == "power":
+                if intercept <= 0:
+                    continue
+
+                y_values = intercept * (x_values ** slope)
+                equation_label = f"{name}: N = {intercept:g}×HR^{slope:g}"
+            else:
+                y_values = slope * x_values + intercept
+                equation_label = f"{name}: N = {slope:g}×HR + {intercept:g}"
+
+            valid_x = []
+            valid_y = []
+
+            for x, y in zip(x_values, y_values):
+                if y > 0:
+                    valid_x.append(x)
+                    valid_y.append(y)
+
+            if not valid_x:
+                continue
+
+            self.ax.plot(
+                valid_x,
+                valid_y,
+                linestyle=":",
+                linewidth=1.2,
+                color="gray",
+                alpha=0.7,
+                label=equation_label,
+            )
+
 
     def _get_boundary_x_range(self, points: list[dict]) -> tuple[float, float]:
         if points:
@@ -1041,7 +1195,7 @@ class StabilityGraphTab(ttk.Frame):
             "domain": domain,
             "surface": surface,
             "boundary_name": boundary_name,
-            "boundary_type": "Stable-Unstable",
+            "boundary_type": self.boundary_type_var.get() or "Stable-Unstable",
             "mode": mode,
             "slope": slope,
             "intercept": intercept,
@@ -1071,6 +1225,7 @@ class StabilityGraphTab(ttk.Frame):
 
     def load_selected_boundary(self):
         row = self._get_selected_boundary_row()
+        self.boundary_type_var.set(row.get("boundary_type", "Stable-Unstable") or "Stable-Unstable")
         if row is None:
             messagebox.showinfo("No curve selected", "Select a saved curve first.")
             return
@@ -1183,5 +1338,98 @@ class StabilityGraphTab(ttk.Frame):
             )
         else:
             self.frozen_axis_limits = None
+
+        self.refresh_graph(load_active_boundary=False)
+
+    
+    def _plot_active_saved_boundaries(self, points: list[dict]):
+        context = self._get_exact_curve_context()
+
+        if context is None:
+            return
+
+        project, domain, surface = context
+
+        boundary_types = [
+            "Stable-Unstable",
+            "Unstable-Caved",
+        ]
+
+        styles = {
+            "Stable-Unstable": {
+                "color": "black",
+                "label_prefix": "Active Stable-Unstable",
+            },
+            "Unstable-Caved": {
+                "color": "darkred",
+                "label_prefix": "Active Unstable-Caved",
+            },
+        }
+
+        x_min, x_max = self._get_boundary_x_range(points)
+
+        if x_min <= 0 or x_max <= 0 or x_min >= x_max:
+            return
+
+        x_values = np.linspace(x_min, x_max, 300)
+
+        for boundary_type in boundary_types:
+            boundary = find_active_boundary_exact(
+                project=project,
+                domain=domain,
+                surface=surface,
+                boundary_type=boundary_type,
+                db_path=self.database_path,
+            )
+
+            if boundary is None:
+                continue
+
+            slope = _safe_float(boundary.get("slope"))
+            intercept = _safe_float(boundary.get("intercept"))
+            mode = str(boundary.get("mode", "linear") or "linear").strip().lower()
+            name = boundary.get("boundary_name", "") or boundary_type
+
+            if slope is None or intercept is None:
+                continue
+
+            if mode == "power":
+                if intercept <= 0:
+                    continue
+
+                y_values = intercept * (x_values ** slope)
+                equation_label = f"{styles[boundary_type]['label_prefix']}: {name}: N = {intercept:g}×HR^{slope:g}"
+            else:
+                y_values = slope * x_values + intercept
+                equation_label = f"{styles[boundary_type]['label_prefix']}: {name}: N = {slope:g}×HR + {intercept:g}"
+
+            valid_x = []
+            valid_y = []
+
+            for x, y in zip(x_values, y_values):
+                if y > 0:
+                    valid_x.append(x)
+                    valid_y.append(y)
+
+            if not valid_x:
+                continue
+
+            self.ax.plot(
+                valid_x,
+                valid_y,
+                linestyle="--",
+                linewidth=2.2,
+                color=styles[boundary_type]["color"],
+                label=equation_label,
+                zorder=8,
+            )
+
+    def on_boundary_type_changed(self):
+        self.saved_boundary_var.set("")
+        self.saved_boundaries = []
+        self.saved_boundary_combo["values"] = []
+
+        self.refresh_saved_boundaries()
+        self.load_active_boundary_for_current_filters(show_message=False)
 
         self.refresh_graph(load_active_boundary=False)
