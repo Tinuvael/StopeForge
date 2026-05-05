@@ -96,6 +96,11 @@ class StopeForgeApp(tk.Tk):
             if hasattr(self.case_histories_tab, "set_context"):
                 self.case_histories_tab.set_context(context)
 
+        elif active_tab == "Calculation Log":
+            if hasattr(self.project_overview_tab, "set_context"):
+                self.project_overview_tab.set_context(context)
+
+
 def main():
     app = StopeForgeApp()
     app.mainloop()
