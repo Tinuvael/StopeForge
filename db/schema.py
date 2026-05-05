@@ -160,6 +160,63 @@ def initialize_database(db_path: str | Path = DEFAULT_PROJECT_DB_PATH) -> None:
             (str(SCHEMA_VERSION),),
         )
 
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS projects (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                project_name TEXT NOT NULL UNIQUE,
+                comment TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+            """
+        )
+
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS domains (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                project_id INTEGER NOT NULL,
+                domain_name TEXT NOT NULL,
+
+                mining_depth_m REAL,
+                unit_weight_t_m3 REAL,
+                ucs_mpa REAL,
+                horizontal_stress_ratio REAL,
+
+                orebody_dip_direction_deg REAL,
+                orebody_dip_angle_deg REAL,
+                orebody_thickness_m REAL,
+
+                q_prime_default REAL,
+                q_prime_crown REAL,
+                q_prime_hanging_wall REAL,
+                q_prime_footwall REAL,
+                q_prime_end_wall REAL,
+
+                joint1_dip_deg REAL,
+                joint1_dip_direction_deg REAL,
+                joint2_dip_deg REAL,
+                joint2_dip_direction_deg REAL,
+                joint3_dip_deg REAL,
+                joint3_dip_direction_deg REAL,
+                joint4_dip_deg REAL,
+                joint4_dip_direction_deg REAL,
+                joint5_dip_deg REAL,
+                joint5_dip_direction_deg REAL,
+
+                comment TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+                FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE,
+                UNIQUE(project_id, domain_name)
+            );
+            """
+        )
+
+
+
         connection.commit()
 
 def _column_exists(connection, table_name: str, column_name: str) -> bool:

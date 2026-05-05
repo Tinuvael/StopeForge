@@ -5,11 +5,17 @@ from core.export_excel import export_project_overview_to_excel
 from core.models import StopeResult
 
 
+ALL_VALUE = "All"
+
+
 class ProjectOverviewTab(ttk.Frame):
     def __init__(self, parent):
         super().__init__(parent)
 
         self.rows: list[dict] = []
+
+        self.project_filter_var = tk.StringVar(value=ALL_VALUE)
+        self.domain_filter_var = tk.StringVar(value=ALL_VALUE)
 
         self._build_ui()
 
@@ -22,7 +28,7 @@ class ProjectOverviewTab(ttk.Frame):
 
         ttk.Label(
             title_frame,
-            text="Project Overview",
+            text="Calculation Log",
             font=("Segoe UI", 16, "bold"),
         ).pack(side="left")
 
@@ -39,6 +45,20 @@ class ProjectOverviewTab(ttk.Frame):
         ).pack(side="right", padx=(0, 8))
 
 
+        self._build_table(container)
+
+        self.summary_var = tk.StringVar(value="No saved calculations yet.")
+        ttk.Label(
+            container,
+            textvariable=self.summary_var,
+            font=("Segoe UI", 10, "bold"),
+        ).pack(anchor="w", pady=(8, 0))
+
+
+    def _build_table(self, parent):
+        table_frame = ttk.Frame(parent)
+        table_frame.pack(fill="both", expand=True)
+
         columns = (
             "project",
             "domain",
@@ -53,7 +73,7 @@ class ProjectOverviewTab(ttk.Frame):
             "comment",
         )
 
-        self.tree = ttk.Treeview(container, columns=columns, show="headings", height=18)
+        self.tree = ttk.Treeview(table_frame, columns=columns, show="headings", height=18)
 
         headings = {
             "project": "Project",
@@ -87,8 +107,16 @@ class ProjectOverviewTab(ttk.Frame):
             self.tree.heading(column, text=headings[column])
             self.tree.column(column, width=widths[column], anchor="center")
 
-        vertical_scrollbar = ttk.Scrollbar(container, orient="vertical", command=self.tree.yview)
-        horizontal_scrollbar = ttk.Scrollbar(container, orient="horizontal", command=self.tree.xview)
+        vertical_scrollbar = ttk.Scrollbar(
+            table_frame,
+            orient="vertical",
+            command=self.tree.yview,
+        )
+        horizontal_scrollbar = ttk.Scrollbar(
+            parent,
+            orient="horizontal",
+            command=self.tree.xview,
+        )
 
         self.tree.configure(
             yscrollcommand=vertical_scrollbar.set,
@@ -97,14 +125,7 @@ class ProjectOverviewTab(ttk.Frame):
 
         self.tree.pack(side="left", fill="both", expand=True)
         vertical_scrollbar.pack(side="right", fill="y")
-        horizontal_scrollbar.pack(side="bottom", fill="x")
-
-        self.summary_var = tk.StringVar(value="No saved calculations yet.")
-        ttk.Label(
-            container,
-            textvariable=self.summary_var,
-            font=("Segoe UI", 10, "bold"),
-        ).pack(anchor="w", pady=(8, 0))
+        horizontal_scrollbar.pack(fill="x")
 
     def add_result(self, result: StopeResult, comment: str = ""):
         stope = result.stope
@@ -124,7 +145,9 @@ class ProjectOverviewTab(ttk.Frame):
         }
 
         self.rows.append(row)
+        self.refresh_table()
 
+    def _insert_row(self, row: dict):
         self.tree.insert(
             "",
             "end",
@@ -143,40 +166,86 @@ class ProjectOverviewTab(ttk.Frame):
             ),
         )
 
-        self.summary_var.set(f"Saved calculations: {len(self.rows)}")
+
+    def _get_filtered_rows(self) -> list[dict]:
+        project_filter = self.project_filter_var.get()
+        domain_filter = self.domain_filter_var.get()
+
+        filtered = []
+
+        for row in self.rows:
+            if project_filter != ALL_VALUE and row.get("project", "") != project_filter:
+                continue
+
+            if domain_filter != ALL_VALUE and row.get("domain", "") != domain_filter:
+                continue
+
+            filtered.append(row)
+
+        return filtered
+
+    def refresh_table(self):
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+
+        filtered_rows = self._get_filtered_rows()
+
+        for row in filtered_rows:
+            self._insert_row(row)
+
+        if not self.rows:
+            self.summary_var.set("No saved calculations yet.")
+        else:
+            self.summary_var.set(
+                f"Shown calculations: {len(filtered_rows)} / Total saved: {len(self.rows)}"
+            )
+
+    def apply_filters(self):
+        self.refresh_table()
+
+    def reset_filters(self):
+        self.project_filter_var.set(ALL_VALUE)
+        self.domain_filter_var.set(ALL_VALUE)
+        self.refresh_table()
+
+    def set_context(self, context: dict):
+        project = context.get("project", "")
+        domain = context.get("domain", "")
+
+        self.project_filter_var.set(project if project else ALL_VALUE)
+        self.domain_filter_var.set(domain if domain else ALL_VALUE)
+
+        self.apply_filters()
 
     def clear_table(self):
         if not self.rows:
             return
 
         answer = messagebox.askyesno(
-            "Clear Project Overview",
-            "Clear all saved calculations from Project Overview?",
+            "Clear Calculation Log",
+            "Clear all saved calculations from Calculation Log?",
         )
 
         if not answer:
             return
 
         self.rows.clear()
-
-        for item in self.tree.get_children():
-            self.tree.delete(item)
-
-        self.summary_var.set("No saved calculations yet.")
+        self.refresh_filter_lists()
+        self.refresh_table()
 
     def export_to_excel(self):
         if not self.rows:
             messagebox.showinfo(
                 "No data",
-                "Project Overview is empty.",
+                "Calculation Log is empty.",
             )
             return
-        
+
         output_path = filedialog.asksaveasfilename(
-            title="Export Project Overview",
+            title="Export Calculation Log",
             defaultextension=".xlsx",
             filetypes=[("Excel workbook", "*.xlsx")],
-            initialfile="project_overview.xlsx",
+            initialfile="calculation_log.xlsx",
         )
 
         if not output_path:
@@ -184,15 +253,14 @@ class ProjectOverviewTab(ttk.Frame):
 
         try:
             export_project_overview_to_excel(
-                rows=self.rows,
+                rows=self._get_filtered_rows(),
                 output_path=output_path,
             )
 
             messagebox.showinfo(
                 "Export complete",
-                f"Project Overview was exported to:\n{output_path}",
+                f"Calculation Log was exported to:\n{output_path}",
             )
 
         except Exception as error:
             messagebox.showerror("Export error", str(error))
-

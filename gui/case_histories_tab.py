@@ -84,7 +84,6 @@ class CaseHistoriesTab(ttk.Frame):
 
         self._build_title_bar(container)
         self._build_database_bar(container)
-        self._build_filters(container)
         self._build_editor(container)
         self._build_table(container)
         self._build_summary(container)
@@ -153,65 +152,6 @@ class CaseHistoriesTab(ttk.Frame):
         database_frame.columnconfigure(1, weight=1)
 
 
-    def _build_filters(self, parent):
-        filter_frame = ttk.LabelFrame(parent, text="Filters")
-        filter_frame.pack(fill="x", pady=(0, 8))
-
-        ttk.Label(filter_frame, text="Project").grid(row=0, column=0, padx=6, pady=6, sticky="w")
-        self.project_filter_combo = ttk.Combobox(
-            filter_frame,
-            textvariable=self.project_filter_var,
-            state="readonly",
-            width=22,
-        )
-        self.project_filter_combo.grid(row=0, column=1, padx=6, pady=6, sticky="w")
-
-        ttk.Label(filter_frame, text="Domain").grid(row=0, column=2, padx=6, pady=6, sticky="w")
-        self.domain_filter_combo = ttk.Combobox(
-            filter_frame,
-            textvariable=self.domain_filter_var,
-            state="readonly",
-            width=22,
-        )
-        self.domain_filter_combo.grid(row=0, column=3, padx=6, pady=6, sticky="w")
-
-        ttk.Label(filter_frame, text="Surface").grid(row=0, column=4, padx=6, pady=6, sticky="w")
-        self.surface_filter_combo = ttk.Combobox(
-            filter_frame,
-            textvariable=self.surface_filter_var,
-            state="readonly",
-            width=18,
-        )
-        self.surface_filter_combo.grid(row=0, column=5, padx=6, pady=6, sticky="w")
-
-        ttk.Label(filter_frame, text="Observed").grid(row=0, column=6, padx=6, pady=6, sticky="w")
-        self.observed_filter_combo = ttk.Combobox(
-            filter_frame,
-            textvariable=self.observed_filter_var,
-            state="readonly",
-            width=18,
-        )
-        self.observed_filter_combo.grid(row=0, column=7, padx=6, pady=6, sticky="w")
-
-        ttk.Button(
-            filter_frame,
-            text="Apply filters",
-            command=self.apply_filters,
-        ).grid(row=0, column=8, padx=6, pady=6)
-
-        ttk.Button(
-            filter_frame,
-            text="Reset filters",
-            command=self.reset_filters,
-        ).grid(row=0, column=9, padx=6, pady=6)
-
-        for combo in (
-            self.project_filter_combo,
-            self.domain_filter_combo,
-            self.surface_filter_combo,
-            self.observed_filter_combo,
-        ):
-            combo.bind("<<ComboboxSelected>>", lambda _event: self.apply_filters())
 
     def _build_editor(self, parent):
         edit_frame = ttk.LabelFrame(parent, text="Edit selected case")
@@ -430,27 +370,6 @@ class CaseHistoriesTab(ttk.Frame):
             )
 
 
-    def update_filter_values(self):
-        projects = sorted({row.get("project", "") for row in self.rows if row.get("project", "")})
-        domains = sorted({row.get("domain", "") for row in self.rows if row.get("domain", "")})
-        surfaces = sorted({row.get("surface", "") for row in self.rows if row.get("surface", "")})
-        observed_states = sorted(
-            {row.get("observed_state", "Unknown") for row in self.rows if row.get("observed_state", "Unknown")}
-        )
-
-        self.project_filter_combo["values"] = [ALL_VALUE] + projects
-        self.domain_filter_combo["values"] = [ALL_VALUE] + domains
-        self.surface_filter_combo["values"] = [ALL_VALUE] + surfaces
-        self.observed_filter_combo["values"] = [ALL_VALUE] + observed_states
-
-        if self.project_filter_var.get() not in self.project_filter_combo["values"]:
-            self.project_filter_var.set(ALL_VALUE)
-        if self.domain_filter_var.get() not in self.domain_filter_combo["values"]:
-            self.domain_filter_var.set(ALL_VALUE)
-        if self.surface_filter_var.get() not in self.surface_filter_combo["values"]:
-            self.surface_filter_var.set(ALL_VALUE)
-        if self.observed_filter_var.get() not in self.observed_filter_combo["values"]:
-            self.observed_filter_var.set(ALL_VALUE)
 
     def get_filtered_rows(self) -> list[dict]:
         project_filter = self.project_filter_var.get()
@@ -474,25 +393,14 @@ class CaseHistoriesTab(ttk.Frame):
 
         return filtered
 
-    def apply_filters(self):
-        self.filtered_rows = self.get_filtered_rows()
-        self.refresh_table(self.filtered_rows)
-
-    def reset_filters(self):
-        self.project_filter_var.set(ALL_VALUE)
-        self.domain_filter_var.set(ALL_VALUE)
-        self.surface_filter_var.set(ALL_VALUE)
-        self.observed_filter_var.set(ALL_VALUE)
-        self.apply_filters()
 
     def refresh_table(self, rows: list[dict] | None = None):
-        if rows is None:
-            rows = self.rows
-
         for item in self.tree.get_children():
             self.tree.delete(item)
 
-        for row in rows:
+        self.filtered_rows = self.get_filtered_rows()
+
+        for row in self.filtered_rows:
             self.tree.insert(
                 "",
                 "end",
@@ -525,7 +433,7 @@ class CaseHistoriesTab(ttk.Frame):
             )
 
         self.summary_var.set(
-            f"Shown: {len(rows)} / Total: {len(self.rows)} | Database: {self.database_path}"
+            f"Shown: {len(self.filtered_rows)} / Total: {len(self.rows)} | Database: {self.database_path}"
         )
 
 
@@ -616,8 +524,7 @@ class CaseHistoriesTab(ttk.Frame):
     def load_from_database(self):
         self.rows = list_cases(self.database_path)
         self.database_path_var.set(str(self.database_path))
-        self.update_filter_values()
-        self.apply_filters()
+        self.refresh_table()
 
 
     def save_database(self):
@@ -753,3 +660,18 @@ class CaseHistoriesTab(ttk.Frame):
             "Cases deleted",
             "All case histories were deleted from the SQLite database.",
         )
+
+    def set_context(self, context: dict):
+        project = context.get("project", "")
+        domain = context.get("domain", "")
+        surface = context.get("surface", "")
+
+        self.project_filter_var.set(project if project else ALL_VALUE)
+        self.domain_filter_var.set(domain if domain else ALL_VALUE)
+        self.surface_filter_var.set(surface if surface else ALL_VALUE)
+
+        self.refresh_table()
+
+    def apply_filters(self):
+        self.refresh_table()
+

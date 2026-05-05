@@ -88,7 +88,6 @@ class StabilityGraphTab(ttk.Frame):
         container.pack(fill="both", expand=True, padx=10, pady=10)
 
         self._build_title_bar(container)
-        self._build_filters(container)
         self._build_local_boundary_controls(container)
         self._build_graph(container)
 
@@ -117,92 +116,6 @@ class StabilityGraphTab(ttk.Frame):
             command=self.refresh_graph,
         ).pack(side="right", padx=(0, 8))
 
-    def _build_filters(self, parent):
-        filter_frame = ttk.LabelFrame(parent, text="Graph filters")
-        filter_frame.pack(fill="x", pady=(0, 8))
-
-        ttk.Label(filter_frame, text="Project").grid(row=0, column=0, padx=6, pady=6, sticky="w")
-        self.project_filter_combo = ttk.Combobox(
-            filter_frame,
-            textvariable=self.project_filter_var,
-            state="readonly",
-            width=22,
-        )
-        self.project_filter_combo.grid(row=0, column=1, padx=6, pady=6, sticky="w")
-
-        ttk.Label(filter_frame, text="Domain").grid(row=0, column=2, padx=6, pady=6, sticky="w")
-        self.domain_filter_combo = ttk.Combobox(
-            filter_frame,
-            textvariable=self.domain_filter_var,
-            state="readonly",
-            width=22,
-        )
-        self.domain_filter_combo.grid(row=0, column=3, padx=6, pady=6, sticky="w")
-
-        ttk.Label(filter_frame, text="Surface").grid(row=0, column=4, padx=6, pady=6, sticky="w")
-        self.surface_filter_combo = ttk.Combobox(
-            filter_frame,
-            textvariable=self.surface_filter_var,
-            state="readonly",
-            width=18,
-        )
-        self.surface_filter_combo.grid(row=0, column=5, padx=6, pady=6, sticky="w")
-
-        ttk.Label(filter_frame, text="Observed").grid(row=0, column=6, padx=6, pady=6, sticky="w")
-        self.observed_filter_combo = ttk.Combobox(
-            filter_frame,
-            textvariable=self.observed_filter_var,
-            state="readonly",
-            width=18,
-        )
-        self.observed_filter_combo.grid(row=0, column=7, padx=6, pady=6, sticky="w")
-
-        ttk.Button(
-            filter_frame,
-            text="Apply",
-            command=self.refresh_graph,
-        ).grid(row=0, column=8, padx=6, pady=6)
-
-        ttk.Button(
-            filter_frame,
-            text="Reset",
-            command=self.reset_filters,
-        ).grid(row=0, column=9, padx=6, pady=6)
-
-        ttk.Checkbutton(
-            filter_frame,
-            text="Log X",
-            variable=self.log_x_var,
-            command=self.refresh_graph,
-        ).grid(row=1, column=1, padx=6, pady=6, sticky="w")
-
-        ttk.Checkbutton(
-            filter_frame,
-            text="Log Y",
-            variable=self.log_y_var,
-            command=self.refresh_graph,
-        ).grid(row=1, column=2, padx=6, pady=6, sticky="w")
-
-        ttk.Checkbutton(
-            filter_frame,
-            text="Show stope labels",
-            variable=self.show_labels_var,
-            command=self.refresh_graph,
-        ).grid(row=1, column=3, padx=6, pady=6, sticky="w")
-
-        ttk.Button(
-            filter_frame,
-            text="Refresh filter lists",
-            command=self.refresh_filter_lists,
-        ).grid(row=1, column=8, padx=6, pady=6)
-
-        for combo in (
-            self.project_filter_combo,
-            self.domain_filter_combo,
-            self.surface_filter_combo,
-            self.observed_filter_combo,
-        ):
-            combo.bind("<<ComboboxSelected>>", lambda _event: self.refresh_graph())
 
     def _build_local_boundary_controls(self, parent):
         boundary_frame = ttk.LabelFrame(parent, text="Local Curve")
@@ -314,13 +227,13 @@ class StabilityGraphTab(ttk.Frame):
 
         ttk.Button(
             boundary_frame,
-            text="Load",
+            text="Load curve",
             command=self.load_selected_boundary,
         ).grid(row=2, column=5, padx=6, pady=6)
 
         ttk.Button(
             boundary_frame,
-            text="Save",
+            text="Save curve",
             command=self.save_current_boundary,
         ).grid(row=2, column=6, padx=6, pady=6)
 
@@ -338,7 +251,7 @@ class StabilityGraphTab(ttk.Frame):
 
         ttk.Button(
             boundary_frame,
-            text="Delete",
+            text="Delete curve",
             command=self.delete_selected_boundary,
         ).grid(row=2, column=9, padx=6, pady=6)
 
@@ -427,6 +340,9 @@ class StabilityGraphTab(ttk.Frame):
         )
 
     def refresh_filter_lists(self):
+        if not hasattr(self, "project_filter_combo"):
+            return
+
         rows = self._get_all_rows()
 
         projects = sorted({row.get("project", "") for row in rows if row.get("project", "")})
@@ -1432,4 +1348,18 @@ class StabilityGraphTab(ttk.Frame):
         self.refresh_saved_boundaries()
         self.load_active_boundary_for_current_filters(show_message=False)
 
+        self.refresh_graph(load_active_boundary=False)
+
+    def set_context(self, context: dict):
+        project = context.get("project", "")
+        domain = context.get("domain", "")
+        surface = context.get("surface", "")
+
+        self.project_filter_var.set(project if project else ALL_VALUE)
+        self.domain_filter_var.set(domain if domain else ALL_VALUE)
+        self.surface_filter_var.set(surface if surface else ALL_VALUE)
+
+        self.refresh_filter_lists()
+        self.refresh_saved_boundaries()
+        self.load_active_boundary_for_current_filters(show_message=False)
         self.refresh_graph(load_active_boundary=False)
