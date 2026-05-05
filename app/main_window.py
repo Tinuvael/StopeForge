@@ -43,6 +43,10 @@ class StopeForgeApp(tk.Tk):
             "surface": "",
         }
 
+        self.tab_contexts = {}
+        self.is_restoring_tree_selection = False
+
+
         self._build_ui()
 
     def _build_ui(self):
@@ -55,8 +59,22 @@ class StopeForgeApp(tk.Tk):
         )
         paned.add(self.project_tree_panel, weight=0)
 
-        self.notebook = ttk.Notebook(paned)
-        paned.add(self.notebook, weight=1)
+        right_container = ttk.Frame(paned)
+        paned.add(right_container, weight=1)
+
+        self.context_var = tk.StringVar(value="Selected context: None")
+
+        ttk.Label(
+            right_container,
+            textvariable=self.context_var,
+            font=("Segoe UI", 9, "bold"),
+            foreground="#555555",
+        ).pack(fill="x", padx=8, pady=(6, 2))
+
+        self.notebook = ttk.Notebook(right_container)
+        self.notebook.pack(fill="both", expand=True)
+        self.notebook.bind("<<NotebookTabChanged>>", self.on_tab_changed)
+
 
 
 
@@ -80,9 +98,16 @@ class StopeForgeApp(tk.Tk):
         self.notebook.add(self.graph_tab, text="Stability Graph")
 
     def on_project_context_changed(self, context):
-        self.current_context = context
+        if self.is_restoring_tree_selection:
+            return
 
-        active_tab = self.notebook.tab(self.notebook.select(), "text")
+        active_tab = self.get_active_tab_name()
+
+        if active_tab:
+            self.tab_contexts[active_tab] = context
+
+        self.current_context = context
+        self.update_context_label(context)
 
         if active_tab == "Calculation":
             if hasattr(self.calculation_tab, "set_context"):
@@ -99,6 +124,54 @@ class StopeForgeApp(tk.Tk):
         elif active_tab == "Calculation Log":
             if hasattr(self.project_overview_tab, "set_context"):
                 self.project_overview_tab.set_context(context)
+
+
+    def update_context_label(self, context):
+        project = context.get("project", "")
+        domain = context.get("domain", "")
+        surface = context.get("surface", "")
+
+        if not project:
+            self.context_var.set("Selected context: None")
+            return
+
+        domain_text = domain if domain else "All domains"
+        surface_text = surface if surface else "All surfaces"
+
+        self.context_var.set(
+            f"Selected context: {project} / {domain_text} / {surface_text}"
+        )
+
+    def get_active_tab_name(self) -> str:
+        selected_tab = self.notebook.select()
+
+        if not selected_tab:
+            return ""
+
+        return self.notebook.tab(selected_tab, "text")
+
+    def on_tab_changed(self, _event=None):
+        active_tab = self.get_active_tab_name()
+        context = self.tab_contexts.get(active_tab)
+
+        self.is_restoring_tree_selection = True
+
+        try:
+            if context:
+                self.project_tree_panel.select_context(context)
+                self.current_context = context
+                self.update_context_label(context)
+            else:
+                self.project_tree_panel.clear_selection()
+                self.current_context = {
+                    "project": "",
+                    "domain": "",
+                    "surface": "",
+                }
+                self.update_context_label(self.current_context)
+
+        finally:
+            self.is_restoring_tree_selection = False
 
 
 def main():
