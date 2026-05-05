@@ -753,3 +753,15 @@ class CaseHistoriesTab(ttk.Frame):
             "Cases deleted",
             "All case histories were deleted from the SQLite database.",
         )
+
+    def set_context(self, context: dict):
+        project = context.get("project", "")
+        domain = context.get("domain", "")
+        surface = context.get("surface", "")
+
+        self.project_filter_var.set(project if project else ALL_VALUE)
+        self.domain_filter_var.set(domain if domain else ALL_VALUE)
+        self.surface_filter_var.set(surface if surface else ALL_VALUE)
+
+        self.apply_filters()
+
