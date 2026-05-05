@@ -392,3 +392,34 @@ class ProjectTreePanel(ttk.Frame):
             f"Created domains: {result['created_domains']}\n"
             f"Skipped rows: {result['skipped_rows']}",
         )
+
+    def clear_selection(self):
+        self.tree.selection_remove(self.tree.selection())
+
+
+    def select_context(self, context: dict | None):
+        self.clear_selection()
+
+        if not context:
+            return
+
+        target_project = context.get("project", "")
+        target_domain = context.get("domain", "")
+        target_surface = context.get("surface", "")
+
+        if not target_project:
+            return
+
+        for item_id, item_context in self.item_context.items():
+            if item_context.get("project", "") != target_project:
+                continue
+
+            if item_context.get("domain", "") != target_domain:
+                continue
+
+            if item_context.get("surface", "") != target_surface:
+                continue
+
+            self.tree.selection_set(item_id)
+            self.tree.see(item_id)
+            return
