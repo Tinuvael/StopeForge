@@ -322,6 +322,7 @@ def calculate_stope_result(
         )
 
 
+
         surface_results.append(
             SurfaceResult(
                 surface_type=surface.surface_type,
