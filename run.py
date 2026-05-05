@@ -3,7 +3,7 @@ import sys
 from app.main_window import main as run_main_window
 
 
-APP_VERSION = "0.1.2"
+APP_VERSION = "0.1.3"
 
 
 def run_smoke_test():
