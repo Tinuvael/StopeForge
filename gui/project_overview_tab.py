@@ -44,7 +44,7 @@ class ProjectOverviewTab(ttk.Frame):
             command=self.export_to_excel,
         ).pack(side="right", padx=(0, 8))
 
-        self._build_filters(container)
+
         self._build_table(container)
 
         self.summary_var = tk.StringVar(value="No saved calculations yet.")
@@ -54,56 +54,6 @@ class ProjectOverviewTab(ttk.Frame):
             font=("Segoe UI", 10, "bold"),
         ).pack(anchor="w", pady=(8, 0))
 
-    def _build_filters(self, parent):
-        filter_frame = ttk.LabelFrame(parent, text="Filters")
-        filter_frame.pack(fill="x", pady=(0, 8))
-
-        ttk.Label(filter_frame, text="Project").grid(
-            row=0, column=0, padx=6, pady=6, sticky="w"
-        )
-
-        self.project_filter_combo = ttk.Combobox(
-            filter_frame,
-            textvariable=self.project_filter_var,
-            state="readonly",
-            width=24,
-        )
-        self.project_filter_combo.grid(row=0, column=1, padx=6, pady=6, sticky="w")
-
-        ttk.Label(filter_frame, text="Domain").grid(
-            row=0, column=2, padx=6, pady=6, sticky="w"
-        )
-
-        self.domain_filter_combo = ttk.Combobox(
-            filter_frame,
-            textvariable=self.domain_filter_var,
-            state="readonly",
-            width=24,
-        )
-        self.domain_filter_combo.grid(row=0, column=3, padx=6, pady=6, sticky="w")
-
-        ttk.Button(
-            filter_frame,
-            text="Apply",
-            command=self.apply_filters,
-        ).grid(row=0, column=4, padx=6, pady=6)
-
-        ttk.Button(
-            filter_frame,
-            text="Reset",
-            command=self.reset_filters,
-        ).grid(row=0, column=5, padx=6, pady=6)
-
-        self.project_filter_combo.bind(
-            "<<ComboboxSelected>>",
-            lambda _event: self.apply_filters(),
-        )
-        self.domain_filter_combo.bind(
-            "<<ComboboxSelected>>",
-            lambda _event: self.apply_filters(),
-        )
-
-        self.refresh_filter_lists()
 
     def _build_table(self, parent):
         table_frame = ttk.Frame(parent)
@@ -195,8 +145,6 @@ class ProjectOverviewTab(ttk.Frame):
         }
 
         self.rows.append(row)
-
-        self.refresh_filter_lists()
         self.refresh_table()
 
     def _insert_row(self, row: dict):
@@ -218,31 +166,6 @@ class ProjectOverviewTab(ttk.Frame):
             ),
         )
 
-    def refresh_filter_lists(self):
-        projects = sorted(
-            {
-                row.get("project", "")
-                for row in self.rows
-                if row.get("project", "")
-            }
-        )
-
-        domains = sorted(
-            {
-                row.get("domain", "")
-                for row in self.rows
-                if row.get("domain", "")
-            }
-        )
-
-        self.project_filter_combo["values"] = [ALL_VALUE] + projects
-        self.domain_filter_combo["values"] = [ALL_VALUE] + domains
-
-        if self.project_filter_var.get() not in self.project_filter_combo["values"]:
-            self.project_filter_var.set(ALL_VALUE)
-
-        if self.domain_filter_var.get() not in self.domain_filter_combo["values"]:
-            self.domain_filter_var.set(ALL_VALUE)
 
     def _get_filtered_rows(self) -> list[dict]:
         project_filter = self.project_filter_var.get()
@@ -278,7 +201,6 @@ class ProjectOverviewTab(ttk.Frame):
             )
 
     def apply_filters(self):
-        self.refresh_filter_lists()
         self.refresh_table()
 
     def reset_filters(self):
