@@ -92,8 +92,9 @@ class StopeForgeApp(tk.Tk):
             if hasattr(self.graph_tab, "set_context"):
                 self.graph_tab.set_context(context)
 
-
-
+        elif active_tab == "Case Histories":
+            if hasattr(self.case_histories_tab, "set_context"):
+                self.case_histories_tab.set_context(context)
 
 def main():
     app = StopeForgeApp()
