@@ -1433,3 +1433,17 @@ class StabilityGraphTab(ttk.Frame):
         self.load_active_boundary_for_current_filters(show_message=False)
 
         self.refresh_graph(load_active_boundary=False)
+
+    def set_context(self, context: dict):
+        project = context.get("project", "")
+        domain = context.get("domain", "")
+        surface = context.get("surface", "")
+
+        self.project_filter_var.set(project if project else ALL_VALUE)
+        self.domain_filter_var.set(domain if domain else ALL_VALUE)
+        self.surface_filter_var.set(surface if surface else ALL_VALUE)
+
+        self.refresh_filter_lists()
+        self.refresh_saved_boundaries()
+        self.load_active_boundary_for_current_filters(show_message=False)
+        self.refresh_graph(load_active_boundary=False)
