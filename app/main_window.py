@@ -6,6 +6,7 @@ from gui.calculation_tab import CalculationTab
 from gui.project_overview_tab import ProjectOverviewTab
 from gui.case_histories_tab import CaseHistoriesTab
 from gui.stability_graph_tab import StabilityGraphTab
+from gui.project_tree_panel import ProjectTreePanel
 
 
 def resource_path(relative_path: str) -> Path:
@@ -36,12 +37,27 @@ class StopeForgeApp(tk.Tk):
             except tk.TclError:
                 pass
 
+        self.current_context = {
+            "project": "",
+            "domain": "",
+            "surface": "",
+        }
 
         self._build_ui()
 
     def _build_ui(self):
-        notebook = ttk.Notebook(self)
-        notebook.pack(fill="both", expand=True)
+        paned = ttk.PanedWindow(self, orient="horizontal")
+        paned.pack(fill="both", expand=True)
+
+        self.project_tree_panel = ProjectTreePanel(
+            paned,
+            on_context_changed=self.on_project_context_changed,
+        )
+        paned.add(self.project_tree_panel, weight=0)
+
+        notebook = ttk.Notebook(paned)
+        paned.add(notebook, weight=1)
+
 
         self.project_overview_tab = ProjectOverviewTab(notebook)
         self.case_histories_tab = CaseHistoriesTab(notebook)
@@ -61,6 +77,12 @@ class StopeForgeApp(tk.Tk):
         notebook.add(self.project_overview_tab, text="Calculation Log")
         notebook.add(self.case_histories_tab, text="Case Histories")
         notebook.add(self.graph_tab, text="Stability Graph")
+
+    def on_project_context_changed(self, context):
+        self.current_context = context
+
+
+        print("Project context changed:", context)
 
 
 def main():
