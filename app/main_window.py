@@ -55,34 +55,44 @@ class StopeForgeApp(tk.Tk):
         )
         paned.add(self.project_tree_panel, weight=0)
 
-        notebook = ttk.Notebook(paned)
-        paned.add(notebook, weight=1)
+        self.notebook = ttk.Notebook(paned)
+        paned.add(self.notebook, weight=1)
 
 
-        self.project_overview_tab = ProjectOverviewTab(notebook)
-        self.case_histories_tab = CaseHistoriesTab(notebook)
+
+        self.project_overview_tab = ProjectOverviewTab(self.notebook)
+        self.case_histories_tab = CaseHistoriesTab(self.notebook)
 
         self.calculation_tab = CalculationTab(
-            notebook,
+            self.notebook,
             on_save_result=self.project_overview_tab.add_result,
             on_add_case_histories=self.case_histories_tab.add_from_current_result,
         )
 
         self.graph_tab = StabilityGraphTab(
-            notebook,
+            self.notebook,
             get_case_rows_callback=lambda: self.case_histories_tab.rows,
         )
 
-        notebook.add(self.calculation_tab, text="Calculation")
-        notebook.add(self.project_overview_tab, text="Calculation Log")
-        notebook.add(self.case_histories_tab, text="Case Histories")
-        notebook.add(self.graph_tab, text="Stability Graph")
+        self.notebook.add(self.calculation_tab, text="Calculation")
+        self.notebook.add(self.project_overview_tab, text="Calculation Log")
+        self.notebook.add(self.case_histories_tab, text="Case Histories")
+        self.notebook.add(self.graph_tab, text="Stability Graph")
 
     def on_project_context_changed(self, context):
         self.current_context = context
 
+        active_tab = self.notebook.tab(self.notebook.select(), "text")
 
-        print("Project context changed:", context)
+        if active_tab == "Calculation":
+            if hasattr(self.calculation_tab, "set_context"):
+                self.calculation_tab.set_context(context)
+
+        elif active_tab == "Stability Graph":
+            if hasattr(self.graph_tab, "set_context"):
+                self.graph_tab.set_context(context)
+
+
 
 
 def main():
