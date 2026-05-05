@@ -126,6 +126,7 @@ class StopeForgeApp(tk.Tk):
                 self.project_overview_tab.set_context(context)
 
 
+
     def update_context_label(self, context):
         project = context.get("project", "")
         domain = context.get("domain", "")
