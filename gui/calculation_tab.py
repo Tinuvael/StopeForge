@@ -2,6 +2,8 @@ import math
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 from core.export_excel import export_current_calculation_to_excel
+from db.project_repository import get_domain
+from db.connection import DEFAULT_PROJECT_DB_PATH
 
 
 from core.models import (
@@ -74,7 +76,7 @@ class CalculationTab(ttk.Frame):
         self.entries[key] = var
 
     def _build_project_frame(self):
-        frame = ttk.LabelFrame(self.scrollable_frame, text="Project / Domain")
+        frame = ttk.LabelFrame(self.scrollable_frame, text="Selected context")
         frame.grid(row=0, column=0, sticky="ew", padx=10, pady=8)
 
         self._add_entry(frame, 0, "Project name", "project_name", "Demo project")
@@ -587,3 +589,142 @@ class CalculationTab(ttk.Frame):
         comment = self._get_string("comment")
 
         self.on_add_case_histories(self.last_result, comment)
+
+    def set_context(self, context: dict):
+        project = context.get("project", "")
+        domain = context.get("domain", "")
+        domain_id = context.get("domain_id")
+
+        if project:
+            self._set_entry("project_name", project)
+
+        if domain:
+            self._set_entry("domain_name", domain)
+
+        if not domain_id:
+            return
+
+        domain_row = get_domain(
+            int(domain_id),
+            db_path=DEFAULT_PROJECT_DB_PATH,
+        )
+
+        if not domain_row:
+            return
+
+        self.apply_domain_properties(domain_row)
+
+
+    def _set_entry(self, key: str, value):
+        if value is None:
+            return
+
+        if value == "":
+            return
+
+        variable = self.entries.get(key)
+
+        if variable is not None:
+            variable.set(str(value))
+
+
+    def _set_surface_entry(self, surface_type: SurfaceType, key: str, value):
+        if value is None:
+            return
+
+        if value == "":
+            return
+
+        surface_fields = self.surface_entries.get(surface_type)
+
+        if not surface_fields:
+            return
+
+        variable = surface_fields.get(key)
+
+        if variable is not None:
+            variable.set(str(value))
+
+
+    def _set_joint_entry(self, index: int, key: str, value):
+        if value is None:
+            return
+
+        if value == "":
+            return
+
+        list_index = index - 1
+
+        if list_index < 0 or list_index >= len(self.joint_entries):
+            return
+
+        variable = self.joint_entries[list_index].get(key)
+
+        if variable is not None:
+            variable.set(str(value))
+
+
+    def apply_domain_properties(self, domain_row: dict):
+        # Basic rock mass and stress parameters
+        self._set_entry("depth_m", domain_row.get("mining_depth_m"))
+        self._set_entry("unit_weight_t_m3", domain_row.get("unit_weight_t_m3"))
+        self._set_entry("ucs_mpa", domain_row.get("ucs_mpa"))
+        self._set_entry("horizontal_stress_ratio", domain_row.get("horizontal_stress_ratio"))
+
+        # Orebody parameters
+        orebody_dip_direction = domain_row.get("orebody_dip_direction_deg")
+        orebody_dip_angle = domain_row.get("orebody_dip_angle_deg")
+        orebody_thickness = domain_row.get("orebody_thickness_m")
+
+        # Orebody dip direction = hanging wall dip direction
+        self._set_entry("hanging_wall_dip_direction_deg", orebody_dip_direction)
+
+        # Orebody dip angle = average stope dip
+        self._set_entry("average_dip_deg", orebody_dip_angle)
+
+        # Orebody thickness = stope width / ore thickness
+        self._set_entry("stope_width_m", orebody_thickness)
+
+        # Surface dips:
+        # Crown stays 0
+        # Hanging wall and Footwall use orebody dip angle
+        # End wall stays 90
+        self._set_surface_entry(SurfaceType.HANGING_WALL, "dip", orebody_dip_angle)
+        self._set_surface_entry(SurfaceType.FOOTWALL, "dip", orebody_dip_angle)
+
+        # Q′ values:
+        # If surface-specific Q′ is empty in domain settings, use Default Q′.
+        q_default = domain_row.get("q_prime_default")
+
+        q_crown = domain_row.get("q_prime_crown") or q_default
+        q_hw = domain_row.get("q_prime_hanging_wall") or q_default
+        q_fw = domain_row.get("q_prime_footwall") or q_default
+        q_end = domain_row.get("q_prime_end_wall") or q_default
+
+        self._set_surface_entry(SurfaceType.CROWN, "q_prime", q_crown)
+        self._set_surface_entry(SurfaceType.HANGING_WALL, "q_prime", q_hw)
+        self._set_surface_entry(SurfaceType.FOOTWALL, "q_prime", q_fw)
+        self._set_surface_entry(SurfaceType.END_WALL, "q_prime", q_end)
+
+
+        # Clear old joint sets before applying selected domain.
+        # Otherwise old domain values remain when the new domain has fewer sets.
+        self._clear_joint_entries()
+
+        # Joint sets
+        for index in range(1, 6):
+            self._set_joint_entry(
+                index,
+                "dip",
+                domain_row.get(f"joint{index}_dip_deg"),
+            )
+            self._set_joint_entry(
+                index,
+                "dip_direction",
+                domain_row.get(f"joint{index}_dip_direction_deg"),
+            )
+
+    def _clear_joint_entries(self):
+        for joint_entry in self.joint_entries:
+            joint_entry["dip"].set("")
+            joint_entry["dip_direction"].set("")
