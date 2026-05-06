@@ -46,20 +46,17 @@ jobs:
           - os: windows-latest
             artifact_name: StopeForge-Windows
             smoke_command: .\dist\StopeForge\StopeForge.exe --smoke-test
-            archive_command: Compress-Archive -Path dist\StopeForge -DestinationPath StopeForge-Windows.zip -Force
-            archive_path: StopeForge-Windows.zip
+            artifact_path: dist\StopeForge
 
           - os: macos-15-intel
             artifact_name: StopeForge-macOS-Intel
             smoke_command: ./dist/StopeForge.app/Contents/MacOS/StopeForge --smoke-test
-            archive_command: ditto -c -k --sequesterRsrc --keepParent dist/StopeForge.app StopeForge-macOS-Intel.zip
-            archive_path: StopeForge-macOS-Intel.zip
+            artifact_path: dist/StopeForge.app
 
           - os: macos-26
             artifact_name: StopeForge-macOS-AppleSilicon
             smoke_command: ./dist/StopeForge.app/Contents/MacOS/StopeForge --smoke-test
-            archive_command: ditto -c -k --sequesterRsrc --keepParent dist/StopeForge.app StopeForge-macOS-AppleSilicon.zip
-            archive_path: StopeForge-macOS-AppleSilicon.zip
+            artifact_path: dist/StopeForge.app
 
     runs-on: ${{ matrix.os }}
 
@@ -89,11 +86,8 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}
         run: ${{ matrix.smoke_command }}
 
-      - name: Create zip archive
-        run: ${{ matrix.archive_command }}
-
-      - name: Upload zipped artifact
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact_name }}
-          path: ${{ matrix.archive_path }}
+          path: ${{ matrix.artifact_path }}
