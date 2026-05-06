@@ -1,292 +1,474 @@
 # StopeForge
 
-**StopeForge** is an engineering tool for open stope stability assessment using the Mathews–Potvin Stability Graph method with support for site-specific local calibration.
+**StopeForge** is a desktop geotechnical tool for preliminary open-stope stability assessment using the Mathews/Potvin Stability Graph approach.
 
-The program is intended for preliminary geomechanical assessment of open stopes and comparison between the standard empirical method and locally calibrated stability boundaries based on actual case histories.
-
----
-
-## Main capabilities
-
-StopeForge can:
-
-- calculate open stope stability using the Mathews–Potvin method;
-- assess four stope surfaces separately:
-  - Crown / Back;
-  - Hanging wall;
-  - Footwall;
-  - End wall;
-- calculate the stability number `N`;
-- calculate hydraulic radius `HR`;
-- compare standard and local calibrated assessments;
-- store case histories in a local SQLite database;
-- store local stability boundaries;
-- display case histories on an `HR–N` stability graph;
-- export calculation results to Excel;
-- export stability graphs to PNG.
+The program is designed for engineering workflows where open stope surfaces are assessed individually, case histories are stored, and local stability curves are calibrated using site-specific mining experience.
 
 ---
 
-## Method basis
+## Version
 
-The stability number is calculated as:
+**Current release:** `1.0.0`
+
+---
+
+## Main Features
+
+### Mathews/Potvin Stability Assessment
+
+StopeForge calculates stability parameters for four standard stope surfaces:
+
+- Crown
+- Hanging wall
+- Footwall
+- End wall
+
+For each surface, the program calculates:
+
+- Hydraulic Radius, HR
+- Stress factor, A
+- Joint orientation factor, B
+- Surface orientation factor, C
+- Stability Number, N'
+- Stable HR limit
+- Caved HR limit
+- Stable span
+- Cave span
+- Standard stability state
+
+The stability state is classified as:
+
+- Stable
+- Unstable
+- Caved
+
+---
+
+## Calculation Logic
+
+The main stability number is calculated as:
 
 ```text
-N = Q' × A × B × C
+N' = Q' × A × B × C
 ```
 
 Where:
 
-- `Q'` is the modified Barton rock mass quality index;
-- `A` is the stress factor;
-- `B` is the joint orientation factor;
-- `C` is the surface orientation / gravity factor.
+```text
+Q' = Modified rock mass quality
+A  = Stress factor
+B  = Joint orientation factor
+C  = Surface orientation factor
+```
 
-In this implementation, factor `B` is calculated using the true interplane angle between the stope surface and the joint set.
+Hydraulic radius is calculated as:
 
-Factor `C` is calculated as:
+```text
+HR = Area / Perimeter
+```
+
+For a rectangular surface:
+
+```text
+HR = (a × b) / (2 × (a + b))
+```
+
+In the current StopeForge implementation, the surface orientation factor is calculated as:
 
 ```text
 C = 8 - 6 × cos(dip)
 ```
 
-The assessment is performed for each stope surface separately.
+Where `dip` is the surface dip measured from horizontal.
 
 ---
 
-## Assessment modes
+## Project Tree
 
-The calculation tab has two assessment modes:
+StopeForge uses a project tree as the main workspace context.
 
-### Standard
-
-Uses the standard Mathews–Potvin workflow.
-
-This mode is used for a basic preliminary assessment.
-
-### Compare
-
-Calculates the standard assessment and also compares the result with a saved local boundary.
-
-The local boundary is selected by:
+Project structure:
 
 ```text
-Project
-Domain
-Surface
+Project / Deposit
+└── Domain
+    ├── Crown
+    ├── Hanging wall
+    ├── Footwall
+    └── End wall
 ```
 
-If no matching local boundary is found, the local result is shown as:
+The project tree is used for:
+
+- selecting the active project;
+- selecting the active domain;
+- filtering case histories;
+- filtering the stability graph;
+- applying domain properties to the calculation form.
+
+For the Calculation and Calculation Log tabs, surface selection is ignored because the calculation is performed for all four surfaces.
+
+For the Case Histories and Stability Graph tabs, surface selection is used as a filter.
+
+---
+
+## Domain Properties
+
+Each domain can store default calculation parameters.
+
+### Basic rock mass and stress parameters
+
+- Mining depth
+- Unit weight
+- UCS
+- Horizontal stress ratio K / λ
+
+### Orebody parameters
+
+- Orebody dip direction
+- Orebody dip angle
+- Orebody thickness
+
+### Q' values
+
+- Default Q'
+- Crown Q'
+- Hanging wall Q'
+- Footwall Q'
+- End wall Q'
+
+If only Default Q' is provided, it is applied to all surfaces.
+
+If surface-specific Q' values are provided, they are used for the corresponding surfaces.
+
+### Joint sets
+
+Up to five joint sets can be stored for each domain:
 
 ```text
-Unknown / Not found
+Set 1 dip / dip direction
+Set 2 dip / dip direction
+Set 3 dip / dip direction
+Set 4 dip / dip direction
+Set 5 dip / dip direction
 ```
 
 ---
 
-## Case histories
+## Calculation Tab
 
-The `Case Histories` tab stores actual mining cases.
+The Calculation tab is used to run the main Mathews/Potvin assessment.
 
-A case history can include:
+The calculation is performed for all four surfaces at the same time.
+
+The results table is arranged by surface:
+
+```text
+Parameter | Hanging wall | Footwall | Crown | End wall
+```
+
+Stability states are visually highlighted:
+
+```text
+Stable   = green
+Unstable = yellow
+Caved    = red
+```
+
+Calculation modes:
+
+```text
+Standard = standard Mathews/Potvin assessment
+Compare  = standard assessment plus comparison with active local curves
+```
+
+---
+
+## Calculation Log
+
+The Calculation Log tab is used to store trial calculations.
+
+It can be used as a working calculation library for:
+
+- comparing multiple stope options;
+- keeping calculation alternatives;
+- preparing engineering reports;
+- reviewing previous calculation scenarios.
+
+The log can be filtered by Project and Domain using the Project Tree.
+
+---
+
+## Case Histories
+
+The Case Histories tab stores calculated or imported case history data.
+
+Each case includes:
 
 - project;
 - domain;
 - stope ID;
 - surface;
-- stope geometry;
-- `Q'`, `A`, `B`, `C`, `N`;
-- hydraulic radius;
-- standard assessment;
-- local assessment;
+- geometry;
+- Q';
+- A, B, C;
+- N';
+- HR;
+- predicted state;
 - observed state;
 - comment.
 
-Observed state can be edited manually after saving the calculation.
-
----
-
-## Stability graph
-
-The `Stability Graph` tab displays case history points on an `HR–N` graph.
-
-Available actions:
-
-- filter points by project, domain, surface and observed state;
-- show local curves;
-- manually create linear and power curves;
-- save, load, activate, deactivate and delete local curves;
-- export the graph to PNG.
-
-Local curves can currently be stored as either linear or power functions:
+Observed state can be edited manually:
 
 ```text
-Linear: N = a × HR + b
-Power:  N = k × HR^a
+Unknown
+Stable
+Unstable
+Caved
 ```
 
-For power curves, the interface uses `a / slope` as the exponent and `b / intercept` as coefficient `k`.
+Case histories are stored in an SQLite project database.
 
 ---
 
-## Installation
+## Stability Graph
 
-Create a virtual environment:
+The Stability Graph tab displays case histories on the HR–N' stability chart.
+
+It supports filtering by:
+
+- Project
+- Domain
+- Surface
+
+The graph is used for reviewing case history data and calibrating local stability curves.
+
+---
+
+## Local Curves
+
+StopeForge supports local site-specific stability curves.
+
+Supported boundary types:
+
+```text
+Stable-Unstable
+Unstable-Caved
+```
+
+Supported curve modes:
+
+```text
+Linear:
+N = a × HR + b
+
+Power:
+N = k × HR^a
+```
+
+Saved local curves can be set as active and used in Compare mode.
+
+This allows the standard Mathews/Potvin assessment to be compared with site-specific empirical experience.
+
+---
+
+## Help and About
+
+StopeForge includes built-in Help and About windows.
+
+The Help window contains:
+
+- user workflow;
+- program tab descriptions;
+- Mathews/Potvin method explanation;
+- formulas;
+- factor A / B / C descriptions;
+- local calibration notes;
+- limitations and disclaimer.
+
+The Help window supports English and Russian text.
+
+---
+
+## Current Scope
+
+Included in version `1.0.0`:
+
+- Mathews/Potvin stability calculation;
+- calculation of four standard surfaces;
+- project/domain tree;
+- domain property storage;
+- calculation log;
+- case history database;
+- stability graph;
+- local curve creation and activation;
+- Compare mode;
+- Excel export;
+- built-in Help and About windows.
+
+---
+
+## Deferred Scope
+
+The following features are intentionally deferred to future versions:
+
+- full UI redesign;
+- dark theme;
+- dashboard;
+- advanced reporting;
+- support design module;
+- cablebolt density calculation;
+- cablebolt spacing calculation;
+- cablebolt length calculation;
+- full probabilistic analysis;
+- full localization of the entire UI.
+
+Support design and cablebolt calculations are not included in version `1.0.0`.
+
+---
+
+## Installation for Users
+
+For release builds, download the packaged executable from the release page.
+
+On Windows:
+
+```text
+StopeForge.exe
+```
+
+Run the executable directly.
+
+No Python installation is required for the packaged version.
+
+---
+
+## Running from Source
+
+### Requirements
+
+- Python 3.12+
+- Windows recommended for the current packaged workflow
+
+### Create virtual environment
 
 ```powershell
 py -m venv .venv
 ```
 
-Install dependencies:
+### Activate virtual environment
 
 ```powershell
-.\.venv\Scripts\python.exe -m pip install --upgrade pip
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\activate
+```
+
+### Install dependencies
+
+```powershell
+pip install -r requirements.txt
+```
+
+### Run the application
+
+```powershell
+python run.py
 ```
 
 ---
 
-## Run
-
-Run the program from the project folder:
+## Running Tests
 
 ```powershell
-.\.venv\Scripts\python.exe run.py
+python -m pytest -q
 ```
 
 ---
 
-## Local data storage
+## Building Windows Executable
 
-StopeForge stores project data locally in an SQLite database:
+Example PyInstaller command:
+
+```powershell
+pyinstaller --onefile --windowed --icon=assets/icons/stopeforge_icon.ico --add-data "assets;assets" run.py
+```
+
+The generated executable will be located in:
 
 ```text
-data/projects/stopeforge_project.sqlite
+dist/
 ```
-
-This database contains:
-
-- case histories;
-- saved local boundaries.
-
-The database is created automatically when the program is used.
 
 ---
 
-## Basic workflow
+## Project Structure
 
-### 1. Run a calculation
+Typical project structure:
 
-Open the `Calculation` tab and enter:
+```text
+StopeForge/
+├── app/
+│   ├── main_window.py
+│   ├── splash.py
+│   ├── info_windows.py
+│   ├── help_window.py
+│   └── config.py
+├── assets/
+│   ├── icons/
+│   └── help/
+├── core/
+│   ├── stability.py
+│   ├── mathews_factors.py
+│   ├── local_assessment.py
+│   └── models.py
+├── db/
+│   ├── connection.py
+│   ├── schema.py
+│   ├── project_repository.py
+│   ├── case_repository.py
+│   └── boundary_repository.py
+├── gui/
+│   ├── calculation_tab.py
+│   ├── project_overview_tab.py
+│   ├── case_histories_tab.py
+│   ├── stability_graph_tab.py
+│   └── project_tree_panel.py
+├── tests/
+├── run.py
+├── requirements.txt
+└── README.md
+```
 
-- project and domain;
+---
+
+## Engineering Disclaimer
+
+StopeForge is an engineering decision-support tool.
+
+The results must be checked by a qualified geotechnical or geomechanical specialist.
+
+The software should not be used as the sole basis for final design decisions.
+
+Users are responsible for checking:
+
+- input data quality;
+- applicability of the Mathews/Potvin method;
 - rock mass parameters;
-- stope geometry;
-- surface parameters;
-- joint sets.
-
-Select assessment mode:
-
-```text
-Standard
-```
-
-or:
-
-```text
-Compare
-```
-
-Then click:
-
-```text
-Calculate
-```
+- stress assumptions;
+- structural data;
+- domain selection;
+- local calibration curves;
+- mining and operational constraints.
 
 ---
 
-### 2. Save the calculation to case histories
+## Copyright
 
-After calculation, click:
-
-```text
-Add to Case Histories
-```
-
-Then go to the `Case Histories` tab and set the observed state manually:
-
-```text
-Stable
-Unstable
-Caved
-Unknown
-```
+Copyright © 2026 Емшанов Евгений. All rights reserved.
 
 ---
 
-### 3. Create or save a local boundary
+## License
 
-Open the `Stability Graph` tab.
+This software is proprietary unless a separate license file states otherwise.
 
-Filter the case histories by:
-
-- project;
-- domain;
-- surface.
-
-Create a local curve manually, then click:
-
-```text
-Save
-```
-
-The saved active curve can later be used in `Compare` mode.
-
----
-
-### 4. Compare standard and local assessment
-
-Return to the `Calculation` tab.
-
-Select:
-
-```text
-Compare
-```
-
-Run the calculation again.
-
-The result table will show:
-
-- standard assessment;
-- local assessment;
-- local boundary name;
-- boundary value `N`.
-
----
-
-## Important limitations
-
-StopeForge is a preliminary engineering tool based on empirical stability graph methods.
-
-It should not be used as the only basis for final stope design.
-
-The method may be unreliable when:
-
-- the local case history database is too small;
-- structural controls dominate stability;
-- large discrete wedges are present;
-- blasting damage controls failure;
-- fill contact is poor or inconsistent;
-- stress conditions are outside the empirical experience range;
-- the selected local boundary is not representative.
-
-Engineering judgment is required.
-
----
-
-## Status
-
-StopeForge is currently a working prototype.
-
-The program is intended for engineering review, testing and further development.
+Use, copying, modification, redistribution, or commercial application of the software is not permitted without written permission from the copyright holder.
