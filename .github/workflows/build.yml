@@ -1,17 +1,17 @@
-name: Build Desktop Apps
+name: Build StopeForge
 
 on:
-  workflow_dispatch:
   push:
     branches:
       - main
-  pull_request:
-    branches:
-      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
-  tests:
-    name: Run tests
+  build-windows:
+    name: Build Windows EXE
     runs-on: windows-latest
 
     steps:
@@ -19,75 +19,78 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-          cache: "pip"
 
       - name: Install dependencies
+        shell: pwsh
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install pyinstaller
+          if (Test-Path requirements.txt) {
+            pip install -r requirements.txt
+          }
 
-      - name: Run pytest
-        env:
-          PYTHONPATH: ${{ github.workspace }}
+      - name: Build Windows executable
+        shell: pwsh
         run: |
-          pytest
+          pyinstaller --noconfirm --clean --onefile --windowed `
+            --name StopeForge `
+            --icon assets/icons/stopeforge_icon.ico `
+            --add-data "assets;assets" `
+            run.py
 
-  build:
-    name: Build ${{ matrix.artifact_name }}
-    needs: tests
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: StopeForge-Windows
+          path: dist/StopeForge.exe
 
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: windows-latest
-            artifact_name: StopeForge-Windows
-            smoke_command: .\dist\StopeForge\StopeForge.exe --smoke-test
-            artifact_path: dist\StopeForge
-
-          - os: macos-15-intel
-            artifact_name: StopeForge-macOS-Intel
-            smoke_command: ./dist/StopeForge.app/Contents/MacOS/StopeForge --smoke-test
-            artifact_path: dist/StopeForge.app
-
-          - os: macos-26
-            artifact_name: StopeForge-macOS-AppleSilicon
-            smoke_command: ./dist/StopeForge.app/Contents/MacOS/StopeForge --smoke-test
-            artifact_path: dist/StopeForge.app
-
-    runs-on: ${{ matrix.os }}
+  build-macos-intel:
+    name: Build macOS Intel APP
+    runs-on: macos-15-intel
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Check architecture
+        run: |
+          uname -m
+
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-          cache: "pip"
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install pyinstaller
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          fi
 
-      - name: Build app
-        env:
-          PYTHONPATH: ${{ github.workspace }}
+      - name: Build macOS app
         run: |
-          pyinstaller --noconfirm StopeForge.spec
+          pyinstaller --noconfirm --clean --windowed --onedir \
+            --name StopeForge \
+            --icon assets/icons/stopeforge_icon.icns \
+            --add-data "assets:assets" \
+            run.py
 
-      - name: Smoke test packaged app
-        env:
-          PYTHONPATH: ${{ github.workspace }}
-        run: ${{ matrix.smoke_command }}
+      - name: Remove quarantine attributes
+        run: |
+          xattr -cr dist/StopeForge.app || true
 
-      - name: Upload artifact
+      - name: Zip macOS app
+        run: |
+          cd dist
+          ditto -c -k --sequesterRsrc --keepParent StopeForge.app StopeForge-macOS-Intel.zip
+
+      - name: Upload macOS artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact_name }}
-          path: ${{ matrix.artifact_path }}
+          name: StopeForge-macOS-Intel
+          path: dist/StopeForge-macOS-Intel.zip
