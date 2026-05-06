@@ -7,7 +7,8 @@ from gui.project_overview_tab import ProjectOverviewTab
 from gui.case_histories_tab import CaseHistoriesTab
 from gui.stability_graph_tab import StabilityGraphTab
 from gui.project_tree_panel import ProjectTreePanel
-from app.info_windows import show_help_window, show_about_window
+from app.info_window import show_about_window
+from app.help_window import show_help_window
 
 def resource_path(relative_path: str) -> Path:
     """
@@ -25,9 +26,11 @@ class StopeForgeApp(tk.Tk):
     def __init__(self):
         super().__init__()
 
-        self.title("StopeForge")
-        self.geometry("1300x850")
-        self.minsize(1100, 750)
+        from app.config import APP_NAME, DEFAULT_WINDOW_SIZE, MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT
+
+        self.title(APP_NAME)
+        self.geometry(DEFAULT_WINDOW_SIZE)
+        self.minsize(MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT)
 
 
         icon_path = Path(__file__).resolve().parent.parent / "assets" / "icons" / "stopeforge_icon.ico"
