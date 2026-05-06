@@ -123,13 +123,6 @@ class CalculationTab(ttk.Frame):
             width=18,
         ).grid(row=4, column=1, sticky="w", padx=6, pady=4)
 
-        ttk.Label(
-            frame,
-            text=(
-                "Standard = standard Mathews–Potvin assessment. Compare = standard assessment plus saved local boundary."
-            ),
-            foreground="#555555",
-        ).grid(row=5, column=0, columnspan=2, sticky="w", padx=6, pady=(4, 4))
 
         frame.columnconfigure(0, minsize=260)
         frame.columnconfigure(1, minsize=180)
@@ -144,11 +137,6 @@ class CalculationTab(ttk.Frame):
         self._add_entry(frame, 2, "UCS, MPa", "ucs_mpa", "100")
         self._add_entry(frame, 3, "Horizontal stress ratio K / λ", "horizontal_stress_ratio", "1.0")
 
-        ttk.Label(
-            frame,
-            text="K / λ is stored for the project. Current A calculation follows the old prototype logic.",
-            foreground="#555555",
-        ).grid(row=4, column=0, columnspan=2, sticky="w", padx=6, pady=(8, 4))
 
     def _build_geometry_frame(self):
         frame = ttk.LabelFrame(self.scrollable_frame, text="Stope geometry", width=590)
@@ -273,15 +261,6 @@ class CalculationTab(ttk.Frame):
                 "stress_factor_a": stress_factor_a_var,
             }
 
-        ttk.Label(
-            frame,
-            text=(
-                "Surface dip direction is derived from hanging wall dip direction. "
-                "B is calculated from true interplane angle. "
-                "A override is optional; leave it blank to use simplified automatic A."
-            ),
-            foreground="#555555",
-        ).grid(row=5, column=0, columnspan=4, sticky="w", padx=6, pady=(8, 4))
 
     def _build_buttons(self):
         frame = ttk.Frame(self.scrollable_frame, width=590)
@@ -315,75 +294,78 @@ class CalculationTab(ttk.Frame):
         frame.columnconfigure(1, minsize=280)
 
 
-
     def _build_results_frame(self, parent):
         frame = ttk.LabelFrame(parent, text="Calculation results")
         frame.pack(fill="both", expand=True, padx=10, pady=8)
 
-        self.results_cards_frame = ttk.Frame(frame)
-        self.results_cards_frame.pack(fill="both", expand=True, padx=6, pady=6)
+        self.result_grid_vars = {}
+        self.result_grid_labels = {}
 
-        self.result_card_vars = {}
+        surfaces = [
+            SurfaceType.HANGING_WALL,
+            SurfaceType.FOOTWALL,
+            SurfaceType.CROWN,
+            SurfaceType.END_WALL,
+        ]
 
-        for index, surface_type in enumerate(
-            [
-                SurfaceType.CROWN,
-                SurfaceType.HANGING_WALL,
-                SurfaceType.FOOTWALL,
-                SurfaceType.END_WALL,
-            ]
-        ):
-            card = ttk.LabelFrame(self.results_cards_frame, text=surface_type.value)
-            card.pack(fill="x", padx=4, pady=4)
+        rows = [
+            ("Dip, °", "dip"),
+            ("Q′", "q_prime"),
+            ("A", "a"),
+            ("B", "b"),
+            ("C", "c"),
+            ("N′", "n"),
+            ("Actual HR", "actual_hr"),
+            ("HR stable", "hr"),
+            ("HR cave", "hro"),
+            ("Stable span", "stable_span"),
+            ("Cave span", "cave_span"),
+            ("Rating length", "rating_length"),
+            ("Standard State", "standard_state"),
+            ("Local State", "local_state"),
+            ("Local Boundary", "local_boundary"),
+            ("Boundary N", "local_boundary_n"),
+        ]
 
-            card_vars = {}
+        table = ttk.Frame(frame)
+        table.pack(fill="both", expand=True, padx=6, pady=6)
 
-            rows = [
-                ("Dip, °", "dip"),
-                ("Q′", "q_prime"),
-                ("A", "a"),
-                ("B", "b"),
-                ("C", "c"),
-                ("N", "n"),
-                ("Actual HR", "actual_hr"),
-                ("HR stable", "hr"),
-                ("HR cave", "hro"),
-                ("Stable span", "stable_span"),
-                ("Cave span", "cave_span"),
-                ("Rating length", "rating_length"),
-                ("Standard State", "standard_state"),
-                ("Local State", "local_state"),
-                ("Local Boundary", "local_boundary"),
-                ("Boundary N", "local_boundary_n"),
-            ]
+        ttk.Label(
+            table,
+            text="Parameter",
+            font=("Segoe UI", 9, "bold"),
+        ).grid(row=0, column=0, padx=6, pady=4, sticky="w")
 
-            for row_index, (label, key) in enumerate(rows):
-                col = 0 if row_index < 8 else 2
-                row = row_index if row_index < 8 else row_index - 8
+        for col_index, surface_type in enumerate(surfaces, start=1):
+            ttk.Label(
+                table,
+                text=surface_type.value,
+                font=("Segoe UI", 9, "bold"),
+            ).grid(row=0, column=col_index, padx=6, pady=4, sticky="w")
 
-                ttk.Label(card, text=label).grid(
-                    row=row,
-                    column=col,
-                    padx=6,
-                    pady=2,
-                    sticky="w",
-                )
+            self.result_grid_vars[surface_type] = {}
+            self.result_grid_labels[surface_type] = {}
 
+        for row_index, (label, key) in enumerate(rows, start=1):
+            ttk.Label(
+                table,
+                text=label,
+            ).grid(row=row_index, column=0, padx=6, pady=2, sticky="w")
+
+            for col_index, surface_type in enumerate(surfaces, start=1):
                 value_var = tk.StringVar(value="—")
-                card_vars[key] = value_var
 
-                ttk.Label(card, textvariable=value_var).grid(
-                    row=row,
-                    column=col + 1,
-                    padx=6,
-                    pady=2,
-                    sticky="w",
+                value_label = ttk.Label(
+                    table,
+                    textvariable=value_var,
                 )
+                value_label.grid(row=row_index, column=col_index, padx=6, pady=2, sticky="w")
 
-            card.columnconfigure(1, weight=1)
-            card.columnconfigure(3, weight=1)
+                self.result_grid_vars[surface_type][key] = value_var
+                self.result_grid_labels[surface_type][key] = value_label
 
-            self.result_card_vars[surface_type] = card_vars
+        for col_index in range(5):
+            table.columnconfigure(col_index, weight=1)
 
         self.summary_var = tk.StringVar(value="No calculation performed yet.")
         ttk.Label(
@@ -391,6 +373,7 @@ class CalculationTab(ttk.Frame):
             textvariable=self.summary_var,
             font=("Segoe UI", 10, "bold"),
         ).pack(anchor="w", padx=6, pady=(4, 8))
+
 
 
     def _get_float(self, key: str) -> float:
@@ -516,38 +499,106 @@ class CalculationTab(ttk.Frame):
         except Exception as error:
             messagebox.showerror("Calculation error", str(error))
 
+    def _state_color(self, state_text: str) -> str:
+        state_text = str(state_text).strip().lower()
+
+        if state_text == "stable":
+            return "#188038"  # green
+
+        if state_text == "unstable":
+            return "#b7791f"  # yellow/brown
+
+        if state_text == "caved":
+            return "#d93025"  # red
+
+        return "#555555"
+
+    def _set_result_value(self, surface_type: SurfaceType, key: str, value: str):
+        value_var = self.result_grid_vars.get(surface_type, {}).get(key)
+
+        if value_var is not None:
+            value_var.set(value)
+
+        label = self.result_grid_labels.get(surface_type, {}).get(key)
+
+        if label is not None:
+            if key in ("standard_state", "local_state"):
+                label.configure(
+                    foreground=self._state_color(value),
+                    font=("Segoe UI", 9, "bold"),
+                )
+            else:
+                label.configure(
+                    foreground="#000000",
+                    font=("Segoe UI", 9),
+                )
+
+
     def _show_result(self, result):
+
+        for surface_type, fields in self.result_grid_vars.items():
+            for key, value_var in fields.items():
+                value_var.set("—")
+
+                label = self.result_grid_labels.get(surface_type, {}).get(key)
+                if label is not None:
+                    label.configure(
+                        foreground="#000000",
+                        font=("Segoe UI", 9),
+                    )
+
         for surface in result.surfaces:
-            card_vars = self.result_card_vars.get(surface.surface_type)
+            surface_type = surface.surface_type
 
-            if not card_vars:
-                continue
+            self._set_result_value(surface_type, "dip", f"{surface.dip_deg:.1f}")
+            self._set_result_value(surface_type, "q_prime", f"{surface.q_prime:.2f}")
+            self._set_result_value(surface_type, "a", f"{surface.stress_factor_a:.3f}")
+            self._set_result_value(surface_type, "b", f"{surface.joint_factor_b:.3f}")
+            self._set_result_value(surface_type, "c", f"{surface.surface_factor_c:.3f}")
+            self._set_result_value(surface_type, "n", f"{surface.stability_number_n:.2f}")
 
-            card_vars["dip"].set(f"{surface.dip_deg:.1f}")
-            card_vars["q_prime"].set(f"{surface.q_prime:.2f}")
-            card_vars["a"].set(f"{surface.stress_factor_a:.3f}")
-            card_vars["b"].set(f"{surface.joint_factor_b:.3f}")
-            card_vars["c"].set(f"{surface.surface_factor_c:.3f}")
-            card_vars["n"].set(f"{surface.stability_number_n:.2f}")
-
-            card_vars["actual_hr"].set(
-                "—" if surface.actual_hr_m is None else f"{surface.actual_hr_m:.2f}"
+            self._set_result_value(
+                surface_type,
+                "actual_hr",
+                "—" if surface.actual_hr_m is None else f"{surface.actual_hr_m:.2f}",
             )
-            card_vars["hr"].set(f"{surface.hr_stable:.2f}")
-            card_vars["hro"].set(f"{surface.hr_caving:.2f}")
-            card_vars["stable_span"].set(self._format_length(surface.stable_strike_length_m))
-            card_vars["cave_span"].set(self._format_length(surface.cave_strike_length_m))
-            card_vars["rating_length"].set(f"{surface.rating_length_m:.2f}")
 
-            card_vars["standard_state"].set(surface.stability_state.value)
-            card_vars["local_state"].set(
-                "—" if surface.local_state is None else surface.local_state.value
+            self._set_result_value(surface_type, "hr", f"{surface.hr_stable:.2f}")
+            self._set_result_value(surface_type, "hro", f"{surface.hr_caving:.2f}")
+            self._set_result_value(
+                surface_type,
+                "stable_span",
+                self._format_length(surface.stable_strike_length_m),
             )
-            card_vars["local_boundary"].set(
-                "—" if surface.local_boundary_name is None else surface.local_boundary_name
+            self._set_result_value(
+                surface_type,
+                "cave_span",
+                self._format_length(surface.cave_strike_length_m),
             )
-            card_vars["local_boundary_n"].set(
-                "—" if surface.local_boundary_n is None else f"{surface.local_boundary_n:.2f}"
+            self._set_result_value(surface_type, "rating_length", f"{surface.rating_length_m:.2f}")
+
+            self._set_result_value(
+                surface_type,
+                "standard_state",
+                surface.stability_state.value,
+            )
+
+            self._set_result_value(
+                surface_type,
+                "local_state",
+                "—" if surface.local_state is None else surface.local_state.value,
+            )
+
+            self._set_result_value(
+                surface_type,
+                "local_boundary",
+                "—" if surface.local_boundary_name is None else surface.local_boundary_name,
+            )
+
+            self._set_result_value(
+                surface_type,
+                "local_boundary_n",
+                "—" if surface.local_boundary_n is None else f"{surface.local_boundary_n:.2f}",
             )
 
         summary_text = (
@@ -560,6 +611,7 @@ class CalculationTab(ttk.Frame):
             summary_text += f" | Local final state: {result.local_final_state.value}"
 
         self.summary_var.set(summary_text)
+
 
 
     def save_to_project_overview(self):

@@ -215,6 +215,7 @@ class ProjectTreePanel(ttk.Frame):
             )
 
             self.item_context[project_item] = {
+                "type": "project",
                 "node_type": "project",
                 "project_id": project["id"],
                 "project": project["project_name"],
@@ -234,6 +235,7 @@ class ProjectTreePanel(ttk.Frame):
                 )
 
                 self.item_context[domain_item] = {
+                    "type": "domain",
                     "node_type": "domain",
                     "project_id": project["id"],
                     "project": project["project_name"],
@@ -251,6 +253,7 @@ class ProjectTreePanel(ttk.Frame):
                     )
 
                     self.item_context[surface_item] = {
+                        "type": "surface",
                         "node_type": "surface",
                         "project_id": project["id"],
                         "project": project["project_name"],
@@ -423,3 +426,26 @@ class ProjectTreePanel(ttk.Frame):
             self.tree.selection_set(item_id)
             self.tree.see(item_id)
             return
+
+    def collapse_surface_nodes(self):
+        """
+        Collapse domain nodes so surface children are hidden.
+        Useful for Calculation and Calculation Log tabs.
+        """
+        for item_id, context in self.item_context.items():
+            item_type = context.get("type", "")
+
+            if item_type == "domain":
+                self.tree.item(item_id, open=False)
+
+
+    def expand_surface_nodes(self):
+        """
+        Expand project/domain nodes so surface children are visible.
+        Useful for Case Histories and Stability Graph tabs.
+        """
+        for item_id, context in self.item_context.items():
+            item_type = context.get("type", "")
+
+            if item_type in ("project", "domain"):
+                self.tree.item(item_id, open=True)

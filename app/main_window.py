@@ -7,7 +7,8 @@ from gui.project_overview_tab import ProjectOverviewTab
 from gui.case_histories_tab import CaseHistoriesTab
 from gui.stability_graph_tab import StabilityGraphTab
 from gui.project_tree_panel import ProjectTreePanel
-
+from app.info_window import show_about_window
+from app.help_window import show_help_window
 
 def resource_path(relative_path: str) -> Path:
     """
@@ -25,9 +26,12 @@ class StopeForgeApp(tk.Tk):
     def __init__(self):
         super().__init__()
 
-        self.title("StopeForge")
-        self.geometry("1300x850")
-        self.minsize(1100, 750)
+        from app.config import APP_NAME, DEFAULT_WINDOW_SIZE, MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT
+
+        self.title(APP_NAME)
+        self.geometry(DEFAULT_WINDOW_SIZE)
+        self.minsize(MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT)
+
 
         icon_path = Path(__file__).resolve().parent.parent / "assets" / "icons" / "stopeforge_icon.ico"
 
@@ -53,30 +57,47 @@ class StopeForgeApp(tk.Tk):
         paned = ttk.PanedWindow(self, orient="horizontal")
         paned.pack(fill="both", expand=True)
 
+        tree_container = ttk.Frame(paned, width=220)
+        tree_container.pack_propagate(False)
+
         self.project_tree_panel = ProjectTreePanel(
-            paned,
+            tree_container,
             on_context_changed=self.on_project_context_changed,
         )
-        paned.add(self.project_tree_panel, weight=0)
+        self.project_tree_panel.pack(fill="both", expand=True)
+
+        paned.add(tree_container, weight=0)
 
         right_container = ttk.Frame(paned)
         paned.add(right_container, weight=1)
 
+        context_bar = ttk.Frame(right_container)
+        context_bar.pack(fill="x", padx=8, pady=(6, 2))
+
         self.context_var = tk.StringVar(value="Selected context: None")
 
         ttk.Label(
-            right_container,
+            context_bar,
             textvariable=self.context_var,
             font=("Segoe UI", 9, "bold"),
             foreground="#555555",
-        ).pack(fill="x", padx=8, pady=(6, 2))
+        ).pack(side="left", fill="x", expand=True)
+
+        ttk.Button(
+            context_bar,
+            text="About",
+            command=self.open_about,
+        ).pack(side="right", padx=(6, 0))
+
+        ttk.Button(
+            context_bar,
+            text="Help",
+            command=self.open_help,
+        ).pack(side="right", padx=(6, 0))
 
         self.notebook = ttk.Notebook(right_container)
         self.notebook.pack(fill="both", expand=True)
         self.notebook.bind("<<NotebookTabChanged>>", self.on_tab_changed)
-
-
-
 
         self.project_overview_tab = ProjectOverviewTab(self.notebook)
         self.case_histories_tab = CaseHistoriesTab(self.notebook)
@@ -89,7 +110,7 @@ class StopeForgeApp(tk.Tk):
 
         self.graph_tab = StabilityGraphTab(
             self.notebook,
-            get_case_rows_callback=lambda: self.case_histories_tab.rows,
+            get_case_rows_callback=self.case_histories_tab.get_filtered_rows,
         )
 
         self.notebook.add(self.calculation_tab, text="Calculation")
@@ -97,11 +118,17 @@ class StopeForgeApp(tk.Tk):
         self.notebook.add(self.case_histories_tab, text="Case Histories")
         self.notebook.add(self.graph_tab, text="Stability Graph")
 
+        self.after(100, lambda: paned.sashpos(0, 220))
+
+
+
     def on_project_context_changed(self, context):
         if self.is_restoring_tree_selection:
             return
 
         active_tab = self.get_active_tab_name()
+
+        context = self.normalize_context_for_tab(context, active_tab)
 
         if active_tab:
             self.tab_contexts[active_tab] = context
@@ -124,6 +151,14 @@ class StopeForgeApp(tk.Tk):
         elif active_tab == "Calculation Log":
             if hasattr(self.project_overview_tab, "set_context"):
                 self.project_overview_tab.set_context(context)
+
+    def normalize_context_for_tab(self, context: dict, active_tab: str) -> dict:
+        normalized = dict(context)
+
+        if active_tab in ("Calculation", "Calculation Log"):
+            normalized["surface"] = ""
+
+        return normalized
 
 
 
@@ -153,6 +188,9 @@ class StopeForgeApp(tk.Tk):
 
     def on_tab_changed(self, _event=None):
         active_tab = self.get_active_tab_name()
+
+        self.update_project_tree_visibility_for_tab(active_tab)
+
         context = self.tab_contexts.get(active_tab)
 
         self.is_restoring_tree_selection = True
@@ -173,6 +211,25 @@ class StopeForgeApp(tk.Tk):
 
         finally:
             self.is_restoring_tree_selection = False
+
+    def update_project_tree_visibility_for_tab(self, active_tab: str):
+        if not hasattr(self, "project_tree_panel"):
+            return
+
+        if active_tab in ("Calculation", "Calculation Log"):
+            if hasattr(self.project_tree_panel, "collapse_surface_nodes"):
+                self.project_tree_panel.collapse_surface_nodes()
+
+        elif active_tab in ("Case Histories", "Stability Graph"):
+            if hasattr(self.project_tree_panel, "expand_surface_nodes"):
+                self.project_tree_panel.expand_surface_nodes()
+
+    def open_help(self):
+        show_help_window(self)
+
+
+    def open_about(self):
+        show_about_window(self)
 
 
 def main():

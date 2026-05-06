@@ -3,7 +3,7 @@ import sys
 from app.main_window import main as run_main_window
 
 
-APP_VERSION = "0.1.3"
+from app.config import APP_VERSION
 
 
 def run_smoke_test():
