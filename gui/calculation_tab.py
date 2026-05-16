@@ -1,7 +1,11 @@
 import math
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
-from core.export_excel import export_current_calculation_to_excel
+from core.export_excel import (
+    build_export_completion_message,
+    export_current_calculation_to_excel,
+    open_exported_file,
+)
 from db.project_repository import get_domain
 from db.connection import DEFAULT_PROJECT_DB_PATH
 
@@ -13,6 +17,7 @@ from core.models import (
     SurfaceType,
 )
 from core.stability import calculate_stope_result
+from gui.stope_section_sketch import StopeSectionSketch, status_to_color
 
 
 class CalculationTab(ttk.Frame):
@@ -374,6 +379,11 @@ class CalculationTab(ttk.Frame):
             font=("Segoe UI", 10, "bold"),
         ).pack(anchor="w", padx=6, pady=(4, 8))
 
+        sketch_frame = ttk.LabelFrame(frame, text="Schematic stope section")
+        sketch_frame.pack(fill="both", expand=False, padx=6, pady=(0, 8))
+        self.stope_section_sketch = StopeSectionSketch(sketch_frame)
+        self.stope_section_sketch.pack(fill="both", expand=True, padx=6, pady=6)
+
 
 
     def _get_float(self, key: str) -> float:
@@ -497,21 +507,13 @@ class CalculationTab(ttk.Frame):
             self._show_result(result)
 
         except Exception as error:
+            self.stope_section_sketch.draw_placeholder(
+                "Cannot draw sketch: check stope geometry inputs."
+            )
             messagebox.showerror("Calculation error", str(error))
 
     def _state_color(self, state_text: str) -> str:
-        state_text = str(state_text).strip().lower()
-
-        if state_text == "stable":
-            return "#188038"  # green
-
-        if state_text == "unstable":
-            return "#b7791f"  # yellow/brown
-
-        if state_text == "caved":
-            return "#d93025"  # red
-
-        return "#555555"
+        return status_to_color(state_text)
 
     def _set_result_value(self, surface_type: SurfaceType, key: str, value: str):
         value_var = self.result_grid_vars.get(surface_type, {}).get(key)
@@ -611,6 +613,7 @@ class CalculationTab(ttk.Frame):
             summary_text += f" | Local final state: {result.local_final_state.value}"
 
         self.summary_var.set(summary_text)
+        self.stope_section_sketch.draw_result(result)
 
 
 
@@ -663,10 +666,15 @@ class CalculationTab(ttk.Frame):
                 output_path=output_path,
             )
 
-            messagebox.showinfo(
-                "Export complete",
-                f"Calculation was exported to:\n{output_path}",
+            opened, open_error = open_exported_file(output_path)
+            message = build_export_completion_message(
+                "Calculation",
+                output_path,
+                opened,
+                open_error,
             )
+
+            messagebox.showinfo("Export complete", message)
 
         except Exception as error:
             messagebox.showerror("Export error", str(error))

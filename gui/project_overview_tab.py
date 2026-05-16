@@ -1,7 +1,11 @@
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 
-from core.export_excel import export_project_overview_to_excel
+from core.export_excel import (
+    build_export_completion_message,
+    export_project_overview_to_excel,
+    open_exported_file,
+)
 from core.models import StopeResult
 
 
@@ -257,10 +261,15 @@ class ProjectOverviewTab(ttk.Frame):
                 output_path=output_path,
             )
 
-            messagebox.showinfo(
-                "Export complete",
-                f"Calculation Log was exported to:\n{output_path}",
+            opened, open_error = open_exported_file(output_path)
+            message = build_export_completion_message(
+                "Calculation Log",
+                output_path,
+                opened,
+                open_error,
             )
+
+            messagebox.showinfo("Export complete", message)
 
         except Exception as error:
             messagebox.showerror("Export error", str(error))
