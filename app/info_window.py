@@ -82,7 +82,7 @@ def show_about_window(parent):
 
     ttk.Label(
         content,
-        text="Copyright © 2026. All rights reserved.",
+        text="Copyright © 2026 Емшанов Евгений",
         font=("Segoe UI", 10, "bold"),
     ).pack(anchor="w", pady=(0, 14))
 
