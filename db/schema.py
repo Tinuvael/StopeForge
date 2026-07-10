@@ -218,14 +218,3 @@ def initialize_database(db_path: str | Path = DEFAULT_PROJECT_DB_PATH) -> None:
 
 
         connection.commit()
-
-def _column_exists(connection, table_name: str, column_name: str) -> bool:
-    columns = connection.execute(f"PRAGMA table_info({table_name});").fetchall()
-    return any(column["name"] == column_name for column in columns)
-
-
-def _add_column_if_missing(connection, table_name: str, column_name: str, column_sql: str) -> None:
-    if not _column_exists(connection, table_name, column_name):
-        connection.execute(
-            f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_sql};"
-        )
