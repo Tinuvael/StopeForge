@@ -78,7 +78,7 @@ def show_splash(duration_ms: int = 1200, fade_ms: int = 500):
 
     copyright_label = tk.Label(
         splash,
-        text="© 2026 Емшанов Евгений. All rights reserved.",
+        text="© 2026 Емшанов Евгений",
         font=("Segoe UI", 8),
         bg="black",
         fg="#FFFFFF",

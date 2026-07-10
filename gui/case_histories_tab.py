@@ -15,7 +15,11 @@ from db.case_repository import (
 )
 
 
-from core.export_excel import export_project_overview_to_excel
+from core.export_excel import (
+    build_export_completion_message,
+    export_project_overview_to_excel,
+    open_exported_file,
+)
 from core.models import SurfaceType, StopeResult
 
 
@@ -595,10 +599,15 @@ class CaseHistoriesTab(ttk.Frame):
         try:
             export_project_overview_to_excel(export_rows, output_path)
 
-            messagebox.showinfo(
-                "Export complete",
-                f"Filtered case histories were exported to:\n{output_path}",
+            opened, open_error = open_exported_file(output_path)
+            message = build_export_completion_message(
+                "Filtered case histories",
+                output_path,
+                opened,
+                open_error,
             )
+
+            messagebox.showinfo("Export complete", message)
         except Exception as error:
             messagebox.showerror("Export error", str(error))
     def import_from_excel(self):

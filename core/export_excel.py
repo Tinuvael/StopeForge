@@ -1,3 +1,6 @@
+import os
+import platform
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -310,6 +313,39 @@ def export_current_calculation_to_excel(
 
     wb.save(output_path)
 
+
+
+def open_exported_file(path: str | Path) -> tuple[bool, str | None]:
+    """Open an exported workbook with the operating system default app."""
+    path = Path(path)
+
+    try:
+        system_name = platform.system()
+
+        if system_name == "Windows":
+            os.startfile(path)  # type: ignore[attr-defined]
+        elif system_name == "Darwin":
+            subprocess.run(["open", str(path)], check=True)
+        else:
+            subprocess.run(["xdg-open", str(path)], check=True)
+    except Exception as error:
+        return False, str(error)
+
+    return True, None
+
+
+def build_export_completion_message(
+    subject: str,
+    output_path: str | Path,
+    opened: bool,
+    open_error: str | None,
+) -> str:
+    message = f"{subject} was exported to:\n{output_path}"
+
+    if opened:
+        return message + "\n\nThe file was opened automatically."
+
+    return message + f"\n\nThe file could not be opened automatically:\n{open_error}"
 
 
 def export_project_overview_to_excel(

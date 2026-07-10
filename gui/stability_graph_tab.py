@@ -16,6 +16,11 @@ from db.boundary_repository import (
 from db.connection import DEFAULT_PROJECT_DB_PATH
 from db.schema import initialize_database
 
+from core.reference_boundaries import (
+    REFERENCE_BOUNDARIES,
+    get_reference_boundaries,
+)
+
 
 ALL_VALUE = "All"
 
@@ -57,6 +62,12 @@ class StabilityGraphTab(ttk.Frame):
         self.log_x_var = tk.BooleanVar(value=True)
         self.log_y_var = tk.BooleanVar(value=True)
         self.show_labels_var = tk.BooleanVar(value=False)
+        self.show_reference_boundaries_var = tk.BooleanVar(value=True)
+
+        self.reference_boundary_var = tk.StringVar(
+            value="Original Mathews–Potvin"
+        )
+
 
         self.show_boundary_var = tk.BooleanVar(value=False)
         self.show_inactive_curves_var = tk.BooleanVar(value=False)
@@ -77,6 +88,7 @@ class StabilityGraphTab(ttk.Frame):
         self.boundary_comment_var = tk.StringVar(value="")
         self.saved_boundary_var = tk.StringVar(value="")
         self.saved_boundaries: list[dict] = []
+        self.show_reference_boundaries = tk.BooleanVar(value=True)
 
         self.visible_stats_var = tk.StringVar(value="Visible cases: no data")
         self.summary_var = tk.StringVar(value="")
@@ -170,50 +182,26 @@ class StabilityGraphTab(ttk.Frame):
         ttk.Entry(
             boundary_frame,
             textvariable=self.boundary_name_var,
-            width=24,
+            width=18,
         ).grid(row=0, column=6, padx=6, pady=6, sticky="w")
 
-        ttk.Label(boundary_frame, text="a / slope").grid(
-            row=0, column=7, padx=6, pady=6, sticky="w"
-        )
-
-        ttk.Entry(
-            boundary_frame,
-            textvariable=self.boundary_slope_var,
-            width=10,
-        ).grid(row=0, column=8, padx=6, pady=6, sticky="w")
-
-        ttk.Label(boundary_frame, text="b / intercept").grid(
-            row=0, column=9, padx=6, pady=6, sticky="w"
-        )
-
-        ttk.Entry(
-            boundary_frame,
-            textvariable=self.boundary_intercept_var,
-            width=10,
-        ).grid(row=0, column=10, padx=6, pady=6, sticky="w")
-
-        ttk.Button(
-            boundary_frame,
-            text="Apply curve",
-            command=self.apply_manual_boundary,
-        ).grid(row=0, column=11, padx=6, pady=6)
-
-        # Row 1: equation and visible stats
-        ttk.Label(
-            boundary_frame,
-            textvariable=self.boundary_equation_var,
-            foreground="#555555",
-        ).grid(row=1, column=0, columnspan=5, padx=6, pady=(0, 6), sticky="w")
 
         ttk.Label(
             boundary_frame,
             textvariable=self.visible_stats_var,
             foreground="#555555",
-        ).grid(row=1, column=5, columnspan=7, padx=6, pady=(0, 6), sticky="w")
+        ).grid(
+            row=1,
+            column=0,
+            columnspan=10,
+            padx=6,
+            pady=(0, 6),
+            sticky="w",
+        )
+
 
         # Row 2: saved curves
-        ttk.Label(boundary_frame, text="Saved curve").grid(
+        ttk.Label(boundary_frame, text="Saved").grid(
             row=2, column=0, padx=6, pady=6, sticky="w"
         )
 
@@ -221,39 +209,39 @@ class StabilityGraphTab(ttk.Frame):
             boundary_frame,
             textvariable=self.saved_boundary_var,
             state="readonly",
-            width=56,
+            width=38,
         )
-        self.saved_boundary_combo.grid(row=2, column=1, columnspan=4, padx=6, pady=6, sticky="w")
+        self.saved_boundary_combo.grid(row=2, column=1, columnspan=2, padx=6, pady=6, sticky="w")
 
         ttk.Button(
             boundary_frame,
-            text="Load curve",
+            text="Load",
             command=self.load_selected_boundary,
-        ).grid(row=2, column=5, padx=6, pady=6)
+        ).grid(row=2, column=3, padx=6, pady=6)
 
         ttk.Button(
             boundary_frame,
-            text="Save curve",
+            text="Save",
             command=self.save_current_boundary,
-        ).grid(row=2, column=6, padx=6, pady=6)
+        ).grid(row=2, column=4, padx=6, pady=6)
 
         ttk.Button(
             boundary_frame,
-            text="Set active",
+            text="Activate",
             command=self.set_selected_boundary_active,
-        ).grid(row=2, column=7, padx=6, pady=6)
+        ).grid(row=2, column=5, padx=6, pady=6)
 
         ttk.Button(
             boundary_frame,
             text="Deactivate",
             command=self.deactivate_selected_boundary,
-        ).grid(row=2, column=8, padx=6, pady=6)
+        ).grid(row=2, column=6, padx=6, pady=6)
 
         ttk.Button(
             boundary_frame,
-            text="Delete curve",
+            text="Delete",
             command=self.delete_selected_boundary,
-        ).grid(row=2, column=9, padx=6, pady=6)
+        ).grid(row=2, column=7, padx=6, pady=6)
 
         # Row 3: graph edit tools
         ttk.Checkbutton(
@@ -265,7 +253,7 @@ class StabilityGraphTab(ttk.Frame):
 
         ttk.Button(
             boundary_frame,
-            text="Clear edit points",
+            text="Clear",
             command=self.clear_edit_points,
         ).grid(row=3, column=1, padx=6, pady=6, sticky="w")
 
@@ -276,20 +264,45 @@ class StabilityGraphTab(ttk.Frame):
             command=self.refresh_graph,
         ).grid(row=3, column=2, padx=6, pady=6, sticky="w")
 
-        # Row 4: comment
-        ttk.Label(boundary_frame, text="Comment").grid(
-            row=4, column=0, padx=6, pady=6, sticky="w"
+        #
+        # Row 5: Reference boundaries
+        #
+
+        ttk.Checkbutton(
+            boundary_frame,
+            text="Show reference boundaries",
+            variable=self.show_reference_boundaries_var,
+            command=self.refresh_graph,
+        ).grid(row=4, column=0, padx=6, pady=6, sticky="w")
+
+
+        ttk.Label(
+            boundary_frame,
+            text="Reference",
+        ).grid(row=4, column=1, padx=6, pady=6, sticky="w")
+
+
+        self.reference_boundary_combo = ttk.Combobox(
+            boundary_frame,
+            textvariable=self.reference_boundary_var,
+            values=list(REFERENCE_BOUNDARIES.keys()),
+            state="readonly",
+            width=28,
         )
 
-        ttk.Entry(
-            boundary_frame,
-            textvariable=self.boundary_comment_var,
-            width=120,
-        ).grid(row=4, column=1, columnspan=10, padx=6, pady=6, sticky="we")
+        self.reference_boundary_combo.grid(
+            row=4,
+            column=2,
+            columnspan=2,
+            padx=6,
+            pady=6,
+            sticky="w",
+        )
 
-        # Let comment field stretch a bit
-        boundary_frame.columnconfigure(6, weight=1)
-
+        self.reference_boundary_combo.bind(
+            "<<ComboboxSelected>>",
+            lambda _event: self.refresh_graph(),
+        )
 
     def _build_graph(self, parent):
         graph_frame = ttk.Frame(parent)
@@ -398,6 +411,20 @@ class StabilityGraphTab(ttk.Frame):
         ]
 
         self.saved_boundary_combo["values"] = display_values
+
+        #
+        # If there are no saved curves,
+        # clear current selection.
+        #
+
+        if not display_values:
+
+            self.saved_boundary_var.set("")
+
+            self.show_boundary_var.set(False)
+
+            return
+
 
         active_row = None
         for row in self.saved_boundaries:
@@ -755,6 +782,41 @@ class StabilityGraphTab(ttk.Frame):
         if self.log_y_var.get():
             self.ax.set_yscale("log")
 
+        #
+        # Draw reference boundaries
+        #
+
+        if self.show_reference_boundaries_var.get():
+
+            stable_x, stable_y, caved_x, caved_y = (
+                get_reference_boundaries(
+                    self.reference_boundary_var.get()
+                )
+            )
+
+            self.ax.plot(
+                stable_x,
+                stable_y,
+                "--",
+                color="gray",
+                linewidth=1.2,
+                alpha=0.9,
+                label="Reference Stable–Failure",
+                zorder=1,
+            )
+
+            self.ax.plot(
+                caved_x,
+                caved_y,
+                "--",
+                color="dimgray",
+                linewidth=1.2,
+                alpha=0.9,
+                label="Reference Failure–Major Failure",
+                zorder=1,
+            )
+
+
         plotted_states = set()
         if points:
             for state_name, style in STATE_STYLES.items():
@@ -800,7 +862,12 @@ class StabilityGraphTab(ttk.Frame):
 
 
 
-        if points or self.show_boundary_var.get():
+        if (
+            points
+            or self.show_boundary_var.get()
+            or self.show_reference_boundaries_var.get()
+        ):
+
             self.ax.legend(loc="best")
         else:
             self.ax.text(
@@ -853,12 +920,31 @@ class StabilityGraphTab(ttk.Frame):
         )
 
         if boundary is None:
+
+            #
+            # Clear currently loaded boundary.
+            #
+
+            self.show_boundary_var.set(False)
+
+            self.boundary_name_var.set("")
+
+            self.saved_boundary_var.set("")
+
+            self.boundary_slope_var.set("1.0")
+
+            self.boundary_intercept_var.set("0.0")
+
+            self.boundary_comment_var.set("")
+
             if show_message:
                 messagebox.showinfo(
                     "No active curve",
                     f"No active {boundary_type} curve found for current Project / Domain / Surface.",
                 )
+
             return
+
 
         self.boundary_name_var.set(boundary.get("boundary_name", "Local boundary"))
         self.boundary_mode_var.set(str(boundary.get("mode", "linear") or "linear"))
@@ -1203,6 +1289,10 @@ class StabilityGraphTab(ttk.Frame):
         if row is None:
             messagebox.showinfo("No curve selected", "Select a saved curve first.")
             return
+
+        self.boundary_type_var.set(
+            row.get("boundary_type", "Stable-Unstable") or "Stable-Unstable"
+        )
 
         boundary_id = row.get("id")
         if boundary_id is None:
