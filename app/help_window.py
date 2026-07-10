@@ -412,24 +412,179 @@ def render_help_ru(parent, image_store: list):
         "equivalent_caving_span = 2 × caving_hr_limit"
     )
 
-    classification = CollapsibleSection(method.body, "Классификация поверхности", expanded=False)
-    classification.pack(fill="x")
+    limitations = CollapsibleSection(parent, "Ограничения метода графиков устойчивости Маттьюза–Потвина", expanded=False,)
+    limitations.pack(fill="x")
 
-    add_formula(
-        classification.body,
-        "if rating_length >= cave_length:\n"
-        "    state = CAVED\n"
-        "elif stable_length < rating_length < cave_length:\n"
-        "    state = UNSTABLE\n"
-        "else:\n"
-        "    state = STABLE"
+
+    add_paragraph(
+        limitations.body,
+        "Метод графиков устойчивости Маттьюза–Потвина является эмпирическим методом "
+        "проектирования, разработанным на основе анализа документированных случаев "
+        "отработки открытых очистных камер. Метод следует применять только в пределах "
+        "условий, для которых он был разработан и откалиброван."
     )
 
     add_paragraph(
-        classification.body,
-        "Для Crown, Hanging wall и Footwall в качестве rating length используется длина камеры "
-        "по простиранию. Для End wall используется расчетная эффективная длина торца."
+        limitations.body,
+        "Описанные ниже ограничения относятся исключительно к методу "
+        "Маттьюза–Потвина и не являются ограничениями программного обеспечения "
+        "StopeForge."
+
     )
+
+    add_paragraph(
+        limitations.body,
+        "При наличии одного или нескольких перечисленных ниже условий необходимо "
+        "использовать инженерную оценку и, при необходимости, альтернативные методы анализа."
+
+    )
+
+
+    section = CollapsibleSection(
+        limitations.body,
+        "Недозаклад",
+        expanded=False,
+    )
+    section.pack(fill="x", padx=5, pady=3)
+
+    add_paragraph(
+        section.body,
+        "Метод графиков устойчивости предполагает, что рассматриваемый пролёт полностью "
+        "ограничен окружающим массивом и закладкой. Это допущение справедливо только "
+        "в случае, если закладка обеспечивает эффективную поддержку выработки. Если "
+        "закладка не имеет плотного контакта со стенками или кровлей либо обладает "
+        "высокой сжимаемостью, эффективный пролёт может значительно превышать "
+        "геометрический размер выработки. В таких условиях применение метода "
+        "графиков устойчивости не рекомендуется."
+
+    )
+    
+    add_image(
+       section.body,
+       image_store,
+       "assets/help/Inadequate_Fill.png",
+       "Рисунок - Недозаклад"
+   )
+
+    section = CollapsibleSection(
+        limitations.body,
+        "Проектные и случайные угловатости",
+        expanded=False,
+    )
+    section.pack(fill="x", padx=5, pady=3)
+
+    add_paragraph(
+        section.body,
+        "Неровности сечения камеры, а также локальные расширения стенок, возникшие в результате "
+        "проекта или перебора при взрывных работах, могут определять устойчивость "
+        "всей выработки. Метод графиков устойчивости не позволяет надёжно оценивать "
+        "такие геометрические особенности, поэтому их следует по возможности избегать."
+
+    )
+
+    add_image(
+        section.body,
+        image_store,
+        "assets/help/Corners-Designed.png",
+        "Рисунок - Неровности контура камеры"
+    )
+
+    section = CollapsibleSection(
+        limitations.body,
+        "Пересечения выработок",
+        expanded=False,
+    )
+    section.pack(fill="x", padx=5, pady=3)
+
+    add_paragraph(
+        section.body,
+        "Несмотря на то что метод может применяться с запасом при оценке крупных "
+        "штреков или подсечных выработок, его не следует использовать для "
+        "проектирования пересечений выработок. В этих случаях нарушается основное "
+        "допущение об ограниченном пролёте, а эквивалентный гидравлический радиус "
+        "не может быть определён корректно."
+
+    )
+
+    add_image(
+        section.body,
+        image_store,
+        "assets/help/intersections.png",
+        "Рисунок - Сопряжения камер"
+    )
+
+    section = CollapsibleSection(
+        limitations.body,
+        "Отдельные структурные клинья",
+        expanded=False,
+    )
+    section.pack(fill="x", padx=5, pady=3)
+
+    add_paragraph(
+        section.body,
+        "Метод предполагает наличие трещиноватого массива с распределённой системой "
+        "разрывных нарушений. Крупные отдельные клинья, образованные протяжёнными "
+        "структурными нарушениями, должны анализироваться отдельно с использованием "
+        "специализированных методов расчёта устойчивости клиньев."
+
+    )
+
+    add_image(
+        section.body,
+        image_store,
+        "assets/help/discrete_wedges.png",
+        "Рисунок - Клиновидные деформации"
+    )
+
+    section = CollapsibleSection(
+        limitations.body,
+        "Зоны расслоения",
+        expanded=False,
+    )
+    section.pack(fill="x", padx=5, pady=3)
+
+    add_paragraph(
+        section.body,
+        "Наличие слабого слоя, расположенного вблизи поверхности выработки и "
+        "примерно параллельного ей, может привести к изгибному разрушению кровли "
+        "даже в случаях, когда метод графиков устойчивости прогнозирует устойчивое "
+        "состояние. Для подобных условий предпочтительно применять методы расчёта "
+        "балочного разрушения."
+
+    )
+
+    add_image(
+        section.body,
+        image_store,
+        "assets/help/delamination_zones.png",
+        "Рисунок - Зоны расслоения"
+    )
+
+    section = CollapsibleSection(
+        limitations.body,
+        "Крупные сдвиговые нарушения",
+        expanded=False,
+    )
+    section.pack(fill="x", padx=5, pady=3)
+
+    add_paragraph(
+        section.body,
+        "Крупномасштабные зоны сдвига или разломы, размеры которых превышают размеры "
+        "очистной камеры, определяют её устойчивость. Такие условия выходят за "
+        "область применимости метода графиков устойчивости и должны анализироваться "
+        "с использованием методов расчёта разрывных сред или других соответствующих "
+        "методов моделирования."
+
+    )
+
+    add_image(
+        section.body,
+        image_store,
+        "assets/help/discrete_shear_structures.png",
+        "Рисунок - Крупные сдвиговые нарушения"
+    )
+
+
 
     local = CollapsibleSection(parent, "Локальные кривые и адаптация под месторождение", expanded=True)
     local.pack(fill="x")
@@ -816,23 +971,163 @@ def render_help_en(parent, image_store: list):
         "equivalent_caving_span = 2 × caving_hr_limit"
     )
 
-    classification = CollapsibleSection(method.body, "Surface classification", expanded=False)
-    classification.pack(fill="x")
 
-    add_formula(
-        classification.body,
-        "if rating_length >= cave_length:\n"
-        "    state = CAVED\n"
-        "elif stable_length < rating_length < cave_length:\n"
-        "    state = UNSTABLE\n"
-        "else:\n"
-        "    state = STABLE"
+    limitations = CollapsibleSection(parent, "Limitations of the Mathews–Potvin Stability Graph Method", expanded=False,)
+    limitations.pack(fill="x")
+
+
+    add_paragraph(
+        limitations.body,
+        "The Mathews–Potvin Stability Graph Method is an empirical design method "
+        "developed from documented open stope case histories. "
+        "It should only be applied within the range of conditions for which it "
+        "was developed and calibrated."
     )
 
     add_paragraph(
-        classification.body,
-        "For Crown, Hanging wall and Footwall, StopeForge uses stope strike length as "
-        "the rating length. For End wall, an effective end-wall length is calculated."
+        limitations.body,
+        "The limitations described below apply to the Mathews–Potvin method itself "
+        "and should not be interpreted as limitations of the StopeForge software."
+    )
+
+    add_paragraph(
+        limitations.body,
+        "Whenever one or more of the following conditions are present, additional "
+        "engineering judgement or alternative analysis methods should be used."
+    )
+
+
+    section = CollapsibleSection(
+        limitations.body,
+        "Inadequate Fill",
+        expanded=False,
+    )
+    section.pack(fill="x", padx=5, pady=3)
+
+    add_paragraph(
+        section.body,
+        "The Stability Graph Method assumes that the analysed span is fully bounded. "
+        "This assumption is valid only where surrounding fill provides effective "
+        "support. If the fill does not tightly contact the walls or back, or is "
+        "highly compressible, the effective span may be much larger than the "
+        "nominal excavation. In these situations the Stability Graph Method should "
+        "not be used to assess stability."
+    )
+    
+    add_image(
+       section.body,
+       image_store,
+       "assets/help/Inadequate_Fill.png",
+       "Figure - Inadequate Fill"
+   )
+
+    section = CollapsibleSection(
+        limitations.body,
+        "Designed and Accidental Corners",
+        expanded=False,
+    )
+    section.pack(fill="x", padx=5, pady=3)
+
+    add_paragraph(
+        section.body,
+        "Corners or wall enlargements produced intentionally or by overbreak can "
+        "govern the stability of the entire excavation. The Stability Graph Method "
+        "cannot reliably evaluate these geometries, and such features should be "
+        "avoided whenever possible."
+    )
+
+    add_image(
+        section.body,
+        image_store,
+        "assets/help/Corners-Designed.png",
+        "Figure - Corners"
+    )
+
+    section = CollapsibleSection(
+        limitations.body,
+        "Intersections",
+        expanded=False,
+    )
+    section.pack(fill="x", padx=5, pady=3)
+
+    add_paragraph(
+        section.body,
+        "Although the Stability Graph Method may be applied conservatively to large "
+        "drifts or sills, it should not be used to design excavation intersections. "
+        "The assumption of a bounded span is not satisfied and an equivalent "
+        "hydraulic radius cannot be defined reliably."
+    )
+
+    add_image(
+        section.body,
+        image_store,
+        "assets/help/intersections.png",
+        "Figure - Intersections"
+    )
+
+    section = CollapsibleSection(
+        limitations.body,
+        "Discrete Wedges",
+        expanded=False,
+    )
+    section.pack(fill="x", padx=5, pady=3)
+
+    add_paragraph(
+        section.body,
+        "The method assumes a rock mass containing distributed jointing. Large "
+        "individual wedges formed by persistent discontinuities must be analysed "
+        "separately using appropriate wedge stability methods."
+    )
+
+    add_image(
+        section.body,
+        image_store,
+        "assets/help/discrete_wedges.png",
+        "Figure - discrete wedges"
+    )
+
+    section = CollapsibleSection(
+        limitations.body,
+        "Delamination Zones",
+        expanded=False,
+    )
+    section.pack(fill="x", padx=5, pady=3)
+
+    add_paragraph(
+        section.body,
+        "A weak layer located close to and approximately parallel with the "
+        "excavation surface may lead to beam-type failure even when the Stability "
+        "Graph predicts a stable span. Beam analysis methods are generally more "
+        "appropriate in these situations."
+    )
+
+    add_image(
+        section.body,
+        image_store,
+        "assets/help/delamination_zones.png",
+        "Figure - delamination zones"
+    )
+
+    section = CollapsibleSection(
+        limitations.body,
+        "Discrete Shear Structures",
+        expanded=False,
+    )
+    section.pack(fill="x", padx=5, pady=3)
+
+    add_paragraph(
+        section.body,
+        "Large-scale shear zones or faults whose dimensions exceed those of the "
+        "stope will govern stability. These conditions fall outside the scope of "
+        "the Stability Graph Method and should be analysed using discontinuum "
+        "modelling or other suitable techniques."
+    )
+
+    add_image(
+        section.body,
+        image_store,
+        "assets/help/discrete_shear_structures.png",
+        "Figure - discrete shear structures"
     )
 
     local = CollapsibleSection(parent, "Local curves and site-specific calibration", expanded=True)
