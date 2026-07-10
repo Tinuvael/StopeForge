@@ -1,5 +1,4 @@
 from pathlib import Path
-from typing import Any
 
 from core.models import StabilityState
 from db.connection import DEFAULT_PROJECT_DB_PATH
