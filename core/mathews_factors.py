@@ -1,8 +1,5 @@
 import math
 
-from core.models import JointSet
-
-
 def calculate_f1(delta_dip: float) -> float:
     if 0 <= delta_dip <= 10:
         return 0.3 - 0.01 * delta_dip
