@@ -9,7 +9,7 @@ Open-source desktop application for empirical open stope design.
 
 Download the latest release from the **Releases** page.
 
-➡ https://github.com/USERNAME/StopeForge/releases/latest
+➡ https://github.com/Tinuvael/StopeForge/releases/latest
 
 ## Features
 
