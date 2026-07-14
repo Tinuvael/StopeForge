@@ -19,6 +19,7 @@ from core.models import (
 from core.stability import calculate_stope_result
 from gui.scroll_utils import enable_mousewheel_scrolling
 from gui.stope_section_sketch import StopeSectionSketch, status_to_color
+from gui.ui_helpers import COMBO_WIDTH, ENTRY_WIDTH, INNER_PAD_X, INNER_PAD_Y, configure_two_column_form
 
 
 class CalculationTab(ttk.Frame):
@@ -44,12 +45,12 @@ class CalculationTab(ttk.Frame):
         # Fixed layout:
         # left input area ≈ 65%
         # right results area ≈ 35%
-        main_container.columnconfigure(0, weight=65, uniform="calculation_columns")
-        main_container.columnconfigure(1, weight=35, uniform="calculation_columns")
+        main_container.columnconfigure(0, weight=3, uniform="calculation_columns")
+        main_container.columnconfigure(1, weight=2, uniform="calculation_columns")
         main_container.rowconfigure(0, weight=1)
 
         # Left side: input panel
-        left_container = ttk.Frame(main_container)
+        left_container = ttk.Frame(main_container, padding=(10, 8, 4, 8))
         left_container.grid(row=0, column=0, sticky="nsew")
 
         canvas = tk.Canvas(left_container, highlightthickness=0)
@@ -65,7 +66,7 @@ class CalculationTab(ttk.Frame):
         scrollbar.pack(side="right", fill="y")
 
         # Right side: result cards
-        self.results_container = ttk.Frame(main_container)
+        self.results_container = ttk.Frame(main_container, padding=(4, 8, 10, 8))
         self.results_container.grid(row=0, column=1, sticky="nsew")
 
         self._build_project_frame()
@@ -89,19 +90,19 @@ class CalculationTab(ttk.Frame):
         label: str,
         key: str,
         default: str = "",
-        width: int = 18,
+        width: int = ENTRY_WIDTH,
     ):
-        ttk.Label(parent, text=label).grid(row=row, column=0, sticky="w", padx=6, pady=4)
+        ttk.Label(parent, text=label).grid(row=row, column=0, sticky="w", padx=INNER_PAD_X, pady=INNER_PAD_Y)
 
         var = tk.StringVar(value=default)
         entry = ttk.Entry(parent, textvariable=var, width=width)
-        entry.grid(row=row, column=1, sticky="w", padx=6, pady=4)
+        entry.grid(row=row, column=1, sticky="ew", padx=INNER_PAD_X, pady=INNER_PAD_Y)
 
         self.entries[key] = var
 
     def _build_project_frame(self):
-        frame = ttk.LabelFrame(self.scrollable_frame, text="Selected context")
-        frame.grid(row=0, column=0, sticky="ew", padx=10, pady=8)
+        frame = ttk.LabelFrame(self.scrollable_frame, text="Context and mode")
+        frame.grid(row=0, column=0, sticky="ew", padx=0, pady=(0, 8))
 
         self._add_entry(frame, 0, "Project name", "project_name", "Demo project")
         self._add_entry(frame, 1, "Domain", "domain_name", "Domain 1")
@@ -121,17 +122,17 @@ class CalculationTab(ttk.Frame):
             textvariable=self.calculation_mode_var,
             values=["Standard", "Compare"],
             state="readonly",
-            width=18,
-        ).grid(row=4, column=1, sticky="w", padx=6, pady=4)
+            width=COMBO_WIDTH,
+        ).grid(row=4, column=1, sticky="ew", padx=INNER_PAD_X, pady=INNER_PAD_Y)
 
 
-        frame.columnconfigure(0, minsize=220)
-        frame.columnconfigure(1, weight=1)
+        configure_two_column_form(frame)
 
 
     def _build_stress_frame(self):
-        frame = ttk.LabelFrame(self.scrollable_frame, text="Rock mass and stress parameters")
-        frame.grid(row=1, column=0, sticky="ew", padx=10, pady=8)
+        frame = ttk.LabelFrame(self.scrollable_frame, text="Rock mass and stress")
+        frame.grid(row=1, column=0, sticky="ew", padx=0, pady=(0, 8))
+        configure_two_column_form(frame)
 
         self._add_entry(frame, 0, "Mining depth, m", "depth_m", "500")
         self._add_entry(frame, 1, "Unit weight, t/m³", "unit_weight_t_m3", "2.7")
@@ -140,8 +141,9 @@ class CalculationTab(ttk.Frame):
 
 
     def _build_geometry_frame(self):
-        frame = ttk.LabelFrame(self.scrollable_frame, text="Stope geometry", width=590)
-        frame.grid(row=2, column=0, sticky="ew", padx=10, pady=8)
+        frame = ttk.LabelFrame(self.scrollable_frame, text="Stope geometry")
+        frame.grid(row=2, column=0, sticky="ew", padx=0, pady=(0, 8))
+        configure_two_column_form(frame)
 
 
         self._add_entry(frame, 0, "Stope height, m", "stope_height_m", "40")
@@ -152,15 +154,15 @@ class CalculationTab(ttk.Frame):
 
     def _build_joint_sets_frame(self):
         frame = ttk.LabelFrame(self.scrollable_frame, text="Discontinuity sets")
-        frame.grid(row=3, column=0, sticky="ew", padx=10, pady=8)
+        frame.grid(row=3, column=0, sticky="ew", padx=0, pady=(0, 8))
 
         headers = ["Set", "Dip, °", "Dip direction, °"]
         for col, header in enumerate(headers):
             ttk.Label(frame, text=header, font=("Segoe UI", 9, "bold")).grid(
                 row=0,
                 column=col,
-                padx=6,
-                pady=4,
+                padx=INNER_PAD_X,
+                pady=INNER_PAD_Y,
                 sticky="w",
             )
 
@@ -173,7 +175,7 @@ class CalculationTab(ttk.Frame):
         ]
 
         for i, (name, dip, dip_dir) in enumerate(defaults, start=1):
-            ttk.Label(frame, text=name).grid(row=i, column=0, padx=6, pady=3, sticky="w")
+            ttk.Label(frame, text=name).grid(row=i, column=0, padx=INNER_PAD_X, pady=3, sticky="w")
 
             dip_var = tk.StringVar(value=dip)
             dip_dir_var = tk.StringVar(value=dip_dir)
@@ -181,14 +183,14 @@ class CalculationTab(ttk.Frame):
             ttk.Entry(frame, textvariable=dip_var, width=16).grid(
                 row=i,
                 column=1,
-                padx=6,
+                padx=INNER_PAD_X,
                 pady=3,
                 sticky="w",
             )
             ttk.Entry(frame, textvariable=dip_dir_var, width=16).grid(
                 row=i,
                 column=2,
-                padx=6,
+                padx=INNER_PAD_X,
                 pady=3,
                 sticky="w",
             )
@@ -202,7 +204,7 @@ class CalculationTab(ttk.Frame):
 
     def _build_surface_frame(self):
         frame = ttk.LabelFrame(self.scrollable_frame, text="Surface parameters")
-        frame.grid(row=4, column=0, sticky="ew", padx=10, pady=8)
+        frame.grid(row=4, column=0, sticky="ew", padx=0, pady=(0, 8))
 
         headers = ["Surface", "Dip, °", "Q'", "A override"]
         for col, header in enumerate(headers):
@@ -264,32 +266,32 @@ class CalculationTab(ttk.Frame):
 
 
     def _build_buttons(self):
-        frame = ttk.Frame(self.scrollable_frame, width=590)
-        frame.grid(row=5, column=0, sticky="ew", padx=10, pady=8)
+        frame = ttk.LabelFrame(self.scrollable_frame, text="Actions")
+        frame.grid(row=5, column=0, sticky="ew", padx=0, pady=(0, 8))
 
         ttk.Button(
             frame,
-            text="Calculate",
+            text="Calc",
             command=self.calculate,
-        ).grid(row=0, column=0, padx=4, pady=4, sticky="ew")
+        ).grid(row=0, column=0, columnspan=2, padx=6, pady=(6, 4), sticky="ew")
 
         ttk.Button(
             frame,
-            text="Save to Calculation Log",
+            text="Save",
             command=self.save_to_project_overview,
-        ).grid(row=0, column=1, padx=4, pady=4, sticky="ew")
+        ).grid(row=1, column=0, padx=6, pady=4, sticky="ew")
 
         ttk.Button(
             frame,
-            text="Add to Case Histories",
+            text="Cases",
             command=self.add_to_case_histories,
-        ).grid(row=1, column=0, padx=4, pady=4, sticky="ew")
+        ).grid(row=1, column=1, padx=6, pady=4, sticky="ew")
 
         ttk.Button(
             frame,
-            text="Export to Excel",
+            text="Export",
             command=self.export_current_calculation,
-        ).grid(row=1, column=1, padx=4, pady=4, sticky="ew")
+        ).grid(row=2, column=0, columnspan=2, padx=6, pady=(4, 6), sticky="ew")
 
         frame.columnconfigure(0, weight=1)
         frame.columnconfigure(1, weight=1)
@@ -297,7 +299,7 @@ class CalculationTab(ttk.Frame):
 
     def _build_results_frame(self, parent):
         frame = ttk.LabelFrame(parent, text="Calculation results")
-        frame.pack(fill="both", expand=True, padx=10, pady=8)
+        frame.pack(fill="both", expand=True)
 
         self.result_grid_vars = {}
         self.result_grid_labels = {}

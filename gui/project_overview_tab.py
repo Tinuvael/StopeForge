@@ -7,6 +7,7 @@ from core.export_excel import (
     open_exported_file,
 )
 from core.models import StopeResult
+from gui.ui_helpers import add_tab_header
 
 
 ALL_VALUE = "All"
@@ -27,27 +28,23 @@ class ProjectOverviewTab(ttk.Frame):
         container = ttk.Frame(self)
         container.pack(fill="both", expand=True, padx=10, pady=10)
 
-        title_frame = ttk.Frame(container)
-        title_frame.pack(fill="x", pady=(0, 8))
-
-        ttk.Label(
-            title_frame,
-            text="Calculation Log",
-            font=("Segoe UI", 16, "bold"),
-        ).pack(side="left")
+        actions = add_tab_header(
+            container,
+            "Calculation Log",
+            "Saved calculations from the current session.",
+        )
 
         ttk.Button(
-            title_frame,
-            text="Clear table",
+            actions,
+            text="Clear",
             command=self.clear_table,
         ).pack(side="right")
 
         ttk.Button(
-            title_frame,
-            text="Export to Excel",
+            actions,
+            text="Export",
             command=self.export_to_excel,
         ).pack(side="right", padx=(0, 8))
-
 
         self._build_table(container)
 
@@ -57,7 +54,6 @@ class ProjectOverviewTab(ttk.Frame):
             textvariable=self.summary_var,
             font=("Segoe UI", 10, "bold"),
         ).pack(anchor="w", pady=(8, 0))
-
 
     def _build_table(self, parent):
         table_frame = ttk.Frame(parent)
@@ -203,6 +199,7 @@ class ProjectOverviewTab(ttk.Frame):
             self.summary_var.set(
                 f"Shown calculations: {len(filtered_rows)} / Total saved: {len(self.rows)}"
             )
+        self.refresh_filter_lists()
 
     def apply_filters(self):
         self.refresh_table()
@@ -211,6 +208,22 @@ class ProjectOverviewTab(ttk.Frame):
         self.project_filter_var.set(ALL_VALUE)
         self.domain_filter_var.set(ALL_VALUE)
         self.refresh_table()
+
+    def refresh_filter_lists(self):
+        """Keep compatibility with clear/reset flows; filters are driven by Project Tree."""
+        if not hasattr(self, "project_filter_combo"):
+            return
+
+        projects = sorted({row.get("project", "") for row in self.rows if row.get("project", "")})
+        domains = sorted({row.get("domain", "") for row in self.rows if row.get("domain", "")})
+
+        self.project_filter_combo["values"] = [ALL_VALUE] + projects
+        self.domain_filter_combo["values"] = [ALL_VALUE] + domains
+
+        if self.project_filter_var.get() not in self.project_filter_combo["values"]:
+            self.project_filter_var.set(ALL_VALUE)
+        if self.domain_filter_var.get() not in self.domain_filter_combo["values"]:
+            self.domain_filter_var.set(ALL_VALUE)
 
     def set_context(self, context: dict):
         project = context.get("project", "")

@@ -20,6 +20,7 @@ from core.reference_boundaries import (
     REFERENCE_BOUNDARIES,
     get_reference_boundaries,
 )
+from gui.ui_helpers import add_tab_header
 
 
 ALL_VALUE = "All"
@@ -107,31 +108,29 @@ class StabilityGraphTab(ttk.Frame):
         self.refresh_graph()
 
     def _build_title_bar(self, parent):
-        title_frame = ttk.Frame(parent)
-        title_frame.pack(fill="x", pady=(0, 8))
-
-        ttk.Label(
-            title_frame,
-            text="Stability Graph",
-            font=("Segoe UI", 16, "bold"),
-        ).pack(side="left")
+        actions = add_tab_header(
+            parent,
+            "Stability Graph",
+            "Case histories and local stability boundaries.",
+        )
 
         ttk.Button(
-            title_frame,
-            text="Export PNG",
+            actions,
+            text="Export",
             command=self.export_png,
         ).pack(side="right")
 
         ttk.Button(
-            title_frame,
-            text="Refresh graph",
+            actions,
+            text="Refresh",
             command=self.refresh_graph,
         ).pack(side="right", padx=(0, 8))
 
-
     def _build_local_boundary_controls(self, parent):
-        boundary_frame = ttk.LabelFrame(parent, text="Local Curve")
+        boundary_frame = ttk.LabelFrame(parent, text="Local curve controls")
         boundary_frame.pack(fill="x", pady=(0, 8))
+        for column in range(8):
+            boundary_frame.columnconfigure(column, weight=1 if column in (2, 4, 6) else 0)
 
         # Row 0: current editable curve controls
         ttk.Checkbutton(
@@ -227,13 +226,13 @@ class StabilityGraphTab(ttk.Frame):
 
         ttk.Button(
             boundary_frame,
-            text="Activate",
+            text="On",
             command=self.set_selected_boundary_active,
         ).grid(row=2, column=5, padx=6, pady=6)
 
         ttk.Button(
             boundary_frame,
-            text="Deactivate",
+            text="Off",
             command=self.deactivate_selected_boundary,
         ).grid(row=2, column=6, padx=6, pady=6)
 
@@ -270,7 +269,7 @@ class StabilityGraphTab(ttk.Frame):
 
         ttk.Checkbutton(
             boundary_frame,
-            text="Show reference boundaries",
+            text="Show reference",
             variable=self.show_reference_boundaries_var,
             command=self.refresh_graph,
         ).grid(row=4, column=0, padx=6, pady=6, sticky="w")

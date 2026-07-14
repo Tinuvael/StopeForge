@@ -4,6 +4,7 @@ from typing import Any, Callable
 
 from db.connection import DEFAULT_PROJECT_DB_PATH
 from gui.scroll_utils import enable_mousewheel_scrolling
+from gui.ui_helpers import configure_two_column_form
 from db.project_repository import (
     create_project,
     delete_domain,
@@ -33,8 +34,8 @@ class DomainEditor(tk.Toplevel):
         self.on_saved = on_saved
 
         self.title("Domain properties")
-        self.geometry("720x640")
-        self.minsize(620, 520)
+        self.geometry("760x680")
+        self.minsize(660, 560)
 
         self.vars: dict[str, tk.StringVar] = {}
 
@@ -53,7 +54,7 @@ class DomainEditor(tk.Toplevel):
             column=1,
             padx=6,
             pady=4,
-            sticky="w",
+            sticky="ew",
         )
 
     def _build_ui(self):
@@ -91,6 +92,7 @@ class DomainEditor(tk.Toplevel):
 
         rock_frame = ttk.LabelFrame(container, text="Basic rock mass and stress parameters")
         rock_frame.grid(row=row, column=0, columnspan=4, sticky="ew", padx=2, pady=5)
+        configure_two_column_form(rock_frame)
         row += 1
 
         self._add_entry(rock_frame, 0, "Mining depth, m", "mining_depth_m")
@@ -100,6 +102,7 @@ class DomainEditor(tk.Toplevel):
 
         orebody_frame = ttk.LabelFrame(container, text="Orebody parameters")
         orebody_frame.grid(row=row, column=0, columnspan=4, sticky="ew", padx=2, pady=5)
+        configure_two_column_form(orebody_frame)
         row += 1
 
         self._add_entry(orebody_frame, 0, "Orebody dip direction, °", "orebody_dip_direction_deg")
@@ -108,6 +111,7 @@ class DomainEditor(tk.Toplevel):
 
         q_frame = ttk.LabelFrame(container, text="Q′ values")
         q_frame.grid(row=row, column=0, columnspan=4, sticky="ew", padx=2, pady=5)
+        configure_two_column_form(q_frame)
         row += 1
 
         self._add_entry(q_frame, 0, "Default Q′", "q_prime_default")
@@ -118,6 +122,8 @@ class DomainEditor(tk.Toplevel):
 
         joint_frame = ttk.LabelFrame(container, text="Joint sets")
         joint_frame.grid(row=row, column=0, columnspan=4, sticky="ew", padx=2, pady=5)
+        joint_frame.columnconfigure(1, weight=1)
+        joint_frame.columnconfigure(2, weight=1)
         row += 1
 
         ttk.Label(joint_frame, text="Set").grid(row=0, column=0, padx=6, pady=4, sticky="w")
@@ -130,15 +136,16 @@ class DomainEditor(tk.Toplevel):
                 joint_frame,
                 textvariable=self._make_var(f"joint{index}_dip_deg"),
                 width=14,
-            ).grid(row=index, column=1, padx=6, pady=4, sticky="w")
+            ).grid(row=index, column=1, padx=6, pady=4, sticky="ew")
             ttk.Entry(
                 joint_frame,
                 textvariable=self._make_var(f"joint{index}_dip_direction_deg"),
                 width=14,
-            ).grid(row=index, column=2, padx=6, pady=4, sticky="w")
+            ).grid(row=index, column=2, padx=6, pady=4, sticky="ew")
 
         comment_frame = ttk.LabelFrame(container, text="Comment")
         comment_frame.grid(row=row, column=0, columnspan=4, sticky="ew", padx=2, pady=5)
+        comment_frame.columnconfigure(0, weight=1)
         row += 1
 
         ttk.Entry(
@@ -206,11 +213,12 @@ class ProjectTreePanel(ttk.Frame):
         button_frame = ttk.Frame(self)
         button_frame.pack(fill="x", padx=6, pady=(0, 6))
 
-        ttk.Button(button_frame, text="Add project", command=self.add_project).pack(fill="x", pady=2)
-        ttk.Button(button_frame, text="Add domain", command=self.add_domain).pack(fill="x", pady=2)
-        ttk.Button(button_frame, text="Edit domain", command=self.edit_domain).pack(fill="x", pady=2)
-        ttk.Button(button_frame, text="Delete selected", command=self.delete_selected).pack(fill="x", pady=2)
-        ttk.Button(button_frame, text="Sync from case histories", command=self.sync_from_case_histories,).pack(fill="x", pady=2)
+        ttk.Button(button_frame, text="Project +", command=self.add_project).pack(fill="x", pady=2)
+        ttk.Button(button_frame, text="Domain +", command=self.add_domain).pack(fill="x", pady=2)
+        ttk.Button(button_frame, text="Edit", command=self.edit_domain).pack(fill="x", pady=2)
+        ttk.Button(button_frame, text="Delete", command=self.delete_selected).pack(fill="x", pady=2)
+        ttk.Separator(button_frame, orient="horizontal").pack(fill="x", pady=4)
+        ttk.Button(button_frame, text="Sync", command=self.sync_from_case_histories,).pack(fill="x", pady=2)
         ttk.Button(button_frame, text="Refresh", command=self.refresh_tree).pack(fill="x", pady=2)
 
     def refresh_tree(self):
