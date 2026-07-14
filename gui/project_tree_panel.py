@@ -3,6 +3,7 @@ from tkinter import ttk, messagebox, simpledialog
 from typing import Any, Callable
 
 from db.connection import DEFAULT_PROJECT_DB_PATH
+from gui.scroll_utils import enable_mousewheel_scrolling
 from db.project_repository import (
     create_project,
     delete_domain,
@@ -32,8 +33,8 @@ class DomainEditor(tk.Toplevel):
         self.on_saved = on_saved
 
         self.title("Domain properties")
-        self.geometry("760x720")
-        self.minsize(700, 650)
+        self.geometry("720x640")
+        self.minsize(620, 520)
 
         self.vars: dict[str, tk.StringVar] = {}
 
@@ -56,8 +57,20 @@ class DomainEditor(tk.Toplevel):
         )
 
     def _build_ui(self):
-        container = ttk.Frame(self)
-        container.pack(fill="both", expand=True, padx=12, pady=12)
+        outer = ttk.Frame(self)
+        outer.pack(fill="both", expand=True, padx=10, pady=10)
+        outer.rowconfigure(0, weight=1)
+        outer.columnconfigure(0, weight=1)
+
+        canvas = tk.Canvas(outer, highlightthickness=0)
+        scrollbar = ttk.Scrollbar(outer, orient="vertical", command=canvas.yview)
+        canvas.grid(row=0, column=0, sticky="nsew")
+        scrollbar.grid(row=0, column=1, sticky="ns")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        container = ttk.Frame(canvas)
+        container.columnconfigure(0, weight=1)
+        enable_mousewheel_scrolling(canvas, container)
 
         row = 0
 
@@ -77,7 +90,7 @@ class DomainEditor(tk.Toplevel):
         row += 1
 
         rock_frame = ttk.LabelFrame(container, text="Basic rock mass and stress parameters")
-        rock_frame.grid(row=row, column=0, columnspan=4, sticky="we", pady=8)
+        rock_frame.grid(row=row, column=0, columnspan=4, sticky="ew", padx=2, pady=5)
         row += 1
 
         self._add_entry(rock_frame, 0, "Mining depth, m", "mining_depth_m")
@@ -86,7 +99,7 @@ class DomainEditor(tk.Toplevel):
         self._add_entry(rock_frame, 3, "Horizontal stress ratio K / λ", "horizontal_stress_ratio")
 
         orebody_frame = ttk.LabelFrame(container, text="Orebody parameters")
-        orebody_frame.grid(row=row, column=0, columnspan=4, sticky="we", pady=8)
+        orebody_frame.grid(row=row, column=0, columnspan=4, sticky="ew", padx=2, pady=5)
         row += 1
 
         self._add_entry(orebody_frame, 0, "Orebody dip direction, °", "orebody_dip_direction_deg")
@@ -94,7 +107,7 @@ class DomainEditor(tk.Toplevel):
         self._add_entry(orebody_frame, 2, "Orebody thickness, m", "orebody_thickness_m")
 
         q_frame = ttk.LabelFrame(container, text="Q′ values")
-        q_frame.grid(row=row, column=0, columnspan=4, sticky="we", pady=8)
+        q_frame.grid(row=row, column=0, columnspan=4, sticky="ew", padx=2, pady=5)
         row += 1
 
         self._add_entry(q_frame, 0, "Default Q′", "q_prime_default")
@@ -104,7 +117,7 @@ class DomainEditor(tk.Toplevel):
         self._add_entry(q_frame, 4, "End wall Q′", "q_prime_end_wall")
 
         joint_frame = ttk.LabelFrame(container, text="Joint sets")
-        joint_frame.grid(row=row, column=0, columnspan=4, sticky="we", pady=8)
+        joint_frame.grid(row=row, column=0, columnspan=4, sticky="ew", padx=2, pady=5)
         row += 1
 
         ttk.Label(joint_frame, text="Set").grid(row=0, column=0, padx=6, pady=4, sticky="w")
@@ -125,19 +138,19 @@ class DomainEditor(tk.Toplevel):
             ).grid(row=index, column=2, padx=6, pady=4, sticky="w")
 
         comment_frame = ttk.LabelFrame(container, text="Comment")
-        comment_frame.grid(row=row, column=0, columnspan=4, sticky="we", pady=8)
+        comment_frame.grid(row=row, column=0, columnspan=4, sticky="ew", padx=2, pady=5)
         row += 1
 
         ttk.Entry(
             comment_frame,
             textvariable=self._make_var("comment"),
-            width=90,
+            width=70,
         ).grid(row=0, column=0, padx=6, pady=6, sticky="we")
 
         button_frame = ttk.Frame(container)
-        button_frame.grid(row=row, column=0, columnspan=4, sticky="e", pady=(12, 0))
+        button_frame.grid(row=row, column=0, columnspan=4, sticky="e", pady=(8, 0))
 
-        ttk.Button(button_frame, text="Save", command=self.save).pack(side="right", padx=6)
+        ttk.Button(button_frame, text="Save", command=self.save).pack(side="right", padx=(6, 0))
         ttk.Button(button_frame, text="Cancel", command=self.destroy).pack(side="right", padx=6)
 
     def save(self):
