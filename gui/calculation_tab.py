@@ -17,6 +17,7 @@ from core.models import (
     SurfaceType,
 )
 from core.stability import calculate_stope_result
+from gui.scroll_utils import enable_mousewheel_scrolling
 from gui.stope_section_sketch import StopeSectionSketch, status_to_color
 
 
@@ -57,12 +58,7 @@ class CalculationTab(ttk.Frame):
         self.scrollable_frame = ttk.Frame(canvas)
         self.scrollable_frame.columnconfigure(0, weight=1)
 
-        self.scrollable_frame.bind(
-            "<Configure>",
-            lambda event: canvas.configure(scrollregion=canvas.bbox("all")),
-        )
-
-        canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
+        enable_mousewheel_scrolling(canvas, self.scrollable_frame)
         canvas.configure(yscrollcommand=scrollbar.set)
 
         canvas.pack(side="left", fill="both", expand=True)
@@ -129,8 +125,8 @@ class CalculationTab(ttk.Frame):
         ).grid(row=4, column=1, sticky="w", padx=6, pady=4)
 
 
-        frame.columnconfigure(0, minsize=260)
-        frame.columnconfigure(1, minsize=180)
+        frame.columnconfigure(0, minsize=220)
+        frame.columnconfigure(1, weight=1)
 
 
     def _build_stress_frame(self):
@@ -295,8 +291,8 @@ class CalculationTab(ttk.Frame):
             command=self.export_current_calculation,
         ).grid(row=1, column=1, padx=4, pady=4, sticky="ew")
 
-        frame.columnconfigure(0, minsize=280)
-        frame.columnconfigure(1, minsize=280)
+        frame.columnconfigure(0, weight=1)
+        frame.columnconfigure(1, weight=1)
 
 
     def _build_results_frame(self, parent):
