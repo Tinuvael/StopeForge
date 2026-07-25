@@ -34,8 +34,8 @@ def resource_path(relative_path: str) -> Path:
 def show_about_window(parent):
     window = tk.Toplevel(parent)
     window.title("About StopeForge")
-    window.geometry("640x570")
-    window.resizable(False, False)
+    window.geometry("680x590")
+    window.minsize(620, 520)
 
     content = ttk.Frame(window, padding=18)
     content.pack(fill="both", expand=True)

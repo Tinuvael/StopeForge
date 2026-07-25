@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import ttk
 from pathlib import Path
+from gui.scroll_utils import enable_mousewheel_scrolling
 
 
 def resource_path(relative_path: str) -> Path:
@@ -1225,16 +1226,7 @@ def show_help_window(parent):
     scrollbar = ttk.Scrollbar(content_area, orient="vertical", command=canvas.yview)
 
     scroll_frame = ttk.Frame(canvas)
-    scroll_window = canvas.create_window((0, 0), window=scroll_frame, anchor="nw")
-
-    def on_frame_configure(_event=None):
-        canvas.configure(scrollregion=canvas.bbox("all"))
-
-    def on_canvas_configure(event):
-        canvas.itemconfigure(scroll_window, width=event.width)
-
-    scroll_frame.bind("<Configure>", on_frame_configure)
-    canvas.bind("<Configure>", on_canvas_configure)
+    enable_mousewheel_scrolling(canvas, scroll_frame)
 
     canvas.configure(yscrollcommand=scrollbar.set)
 

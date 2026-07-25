@@ -21,6 +21,7 @@ from core.export_excel import (
     open_exported_file,
 )
 from core.models import SurfaceType, StopeResult
+from gui.ui_helpers import add_tab_header
 
 
 OBSERVED_STATES = [
@@ -93,30 +94,27 @@ class CaseHistoriesTab(ttk.Frame):
         self._build_summary(container)
 
     def _build_title_bar(self, parent):
-        title_frame = ttk.Frame(parent)
-        title_frame.pack(fill="x", pady=(0, 8))
-
-        ttk.Label(
-            title_frame,
-            text="Case Histories",
-            font=("Segoe UI", 16, "bold"),
-        ).pack(side="left")
+        actions = add_tab_header(
+            parent,
+            "Case Histories",
+            "SQLite-backed case database used by the stability graph.",
+        )
 
         ttk.Button(
-            title_frame,
-            text="Import from Excel",
+            actions,
+            text="Import",
             command=self.import_from_excel,
         ).pack(side="right", padx=(0, 8))
 
         ttk.Button(
-            title_frame,
-            text="Export to Excel",
+            actions,
+            text="Export",
             command=self.export_to_excel,
         ).pack(side="right")
 
         ttk.Button(
-            title_frame,
-            text="Save database",
+            actions,
+            text="Save",
             command=self.save_database,
         ).pack(side="right", padx=(0, 8))
 
@@ -143,13 +141,13 @@ class CaseHistoriesTab(ttk.Frame):
 
         ttk.Button(
             database_frame,
-            text="Reload from SQLite",
+            text="Reload",
             command=self.load_from_database,
         ).grid(row=0, column=2, padx=6, pady=6)
 
         ttk.Button(
             database_frame,
-            text="Clear all cases",
+            text="Clear",
             command=self.clear_all_cases,
         ).grid(row=0, column=3, padx=6, pady=6)
 
@@ -160,6 +158,7 @@ class CaseHistoriesTab(ttk.Frame):
     def _build_editor(self, parent):
         edit_frame = ttk.LabelFrame(parent, text="Edit selected case")
         edit_frame.pack(fill="x", pady=(0, 8))
+        edit_frame.columnconfigure(3, weight=1)
 
         ttk.Label(edit_frame, text="Observed state").grid(row=0, column=0, padx=6, pady=6, sticky="w")
 
@@ -180,17 +179,17 @@ class CaseHistoriesTab(ttk.Frame):
             edit_frame,
             textvariable=self.comment_var,
             width=70,
-        ).grid(row=0, column=3, padx=6, pady=6, sticky="w")
+        ).grid(row=0, column=3, padx=6, pady=6, sticky="ew")
 
         ttk.Button(
             edit_frame,
-            text="Apply to selected",
+            text="Apply",
             command=self.apply_to_selected,
         ).grid(row=0, column=4, padx=6, pady=6, sticky="w")
 
         ttk.Button(
             edit_frame,
-            text="Delete selected",
+            text="Delete",
             command=self.delete_selected,
         ).grid(row=0, column=5, padx=6, pady=6, sticky="w")
 

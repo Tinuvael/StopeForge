@@ -57,7 +57,7 @@ class StopeForgeApp(tk.Tk):
         paned = ttk.PanedWindow(self, orient="horizontal")
         paned.pack(fill="both", expand=True)
 
-        tree_container = ttk.Frame(paned, width=220)
+        tree_container = ttk.Frame(paned, width=240)
         tree_container.pack_propagate(False)
 
         self.project_tree_panel = ProjectTreePanel(
@@ -66,13 +66,18 @@ class StopeForgeApp(tk.Tk):
         )
         self.project_tree_panel.pack(fill="both", expand=True)
 
-        paned.add(tree_container, weight=0)
+        paned.add(tree_container, weight=1)
 
         right_container = ttk.Frame(paned)
         paned.add(right_container, weight=1)
 
-        context_bar = ttk.Frame(right_container)
-        context_bar.pack(fill="x", padx=8, pady=(6, 2))
+        context_area = ttk.Frame(right_container)
+        context_area.pack(fill="x", padx=10, pady=(8, 0))
+        context_area.columnconfigure(0, weight=1)
+
+        context_bar = ttk.Frame(context_area)
+        context_bar.grid(row=0, column=0, sticky="ew")
+        context_bar.columnconfigure(0, weight=1)
 
         self.context_var = tk.StringVar(value="Selected context: None")
 
@@ -81,19 +86,26 @@ class StopeForgeApp(tk.Tk):
             textvariable=self.context_var,
             font=("Segoe UI", 9, "bold"),
             foreground="#555555",
-        ).pack(side="left", fill="x", expand=True)
+        ).grid(row=0, column=0, sticky="ew")
 
         ttk.Button(
             context_bar,
             text="About",
             command=self.open_about,
-        ).pack(side="right", padx=(6, 0))
+        ).grid(row=0, column=2, padx=(6, 0))
 
         ttk.Button(
             context_bar,
             text="Help",
             command=self.open_help,
-        ).pack(side="right", padx=(6, 0))
+        ).grid(row=0, column=1, padx=(6, 0))
+
+        ttk.Separator(context_area, orient="horizontal").grid(
+            row=1,
+            column=0,
+            sticky="ew",
+            pady=(6, 0),
+        )
 
         self.notebook = ttk.Notebook(right_container)
         self.notebook.pack(fill="both", expand=True)
@@ -118,7 +130,7 @@ class StopeForgeApp(tk.Tk):
         self.notebook.add(self.case_histories_tab, text="Case Histories")
         self.notebook.add(self.graph_tab, text="Stability Graph")
 
-        self.after(100, lambda: paned.sashpos(0, 220))
+        self.after(100, lambda: paned.sashpos(0, 240))
 
 
 
