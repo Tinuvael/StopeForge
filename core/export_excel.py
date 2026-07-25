@@ -9,6 +9,7 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
 from core.models import StopeResult
+from db.case_repository import CASE_AUDIT_FIELDS, CASE_FIELDS
 
 
 THIN_BORDER = Border(
@@ -26,6 +27,40 @@ STABLE_FILL = PatternFill("solid", fgColor="A9D18E")
 UNSTABLE_FILL = PatternFill("solid", fgColor="F4B183")
 CAVED_FILL = PatternFill("solid", fgColor="E06666")
 HEADER_FILL = PatternFill("solid", fgColor="D9E1F2")
+
+CASE_HISTORY_EXPORT_VERSION = 2
+CASE_HISTORY_EXPORT_FIELDS = ["id", *CASE_FIELDS, *CASE_AUDIT_FIELDS]
+
+CASE_HISTORY_EXPORT_HEADERS = {
+    "id": "Record ID",
+    "project": "Project",
+    "domain": "Domain",
+    "stope_id": "Stope ID",
+    "surface": "Surface",
+    "depth_m": "Depth, m",
+    "height_m": "Height, m",
+    "avg_dip_deg": "Average Dip, deg",
+    "width_m": "Width, m",
+    "span_m": "Span, m",
+    "q_prime": "Q'",
+    "a": "A",
+    "b": "B",
+    "c": "C",
+    "n": "N",
+    "shape_factor_hr_m": "Hydraulic Radius, m",
+    "stable_hr_limit_m": "Stable HR Limit, m",
+    "predicted_state": "Predicted State",
+    "calculation_mode": "Calculation Mode",
+    "standard_state": "Standard State",
+    "local_state": "Local State",
+    "local_boundary_name": "Local Boundary Name",
+    "local_boundary_n": "Local Boundary N",
+    "actual_hr_m": "Actual HR, m",
+    "observed_state": "Observed State",
+    "comment": "Comment",
+    "created_at": "Created At",
+    "updated_at": "Updated At",
+}
 
 
 def _style_range(ws, cell_range: str, fill=None, bold=False, align_center=True):
@@ -346,6 +381,49 @@ def build_export_completion_message(
         return message + "\n\nThe file was opened automatically."
 
     return message + f"\n\nThe file could not be opened automatically:\n{open_error}"
+
+
+def export_case_histories_to_excel(
+    rows: list[dict],
+    output_path: str | Path,
+) -> None:
+    """Write a complete, versioned and re-importable Case History backup."""
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Case Histories"
+
+    ws.append([CASE_HISTORY_EXPORT_HEADERS[field] for field in CASE_HISTORY_EXPORT_FIELDS])
+    for row in rows:
+        ws.append([row.get(field, "") for field in CASE_HISTORY_EXPORT_FIELDS])
+
+    for cell in ws[1]:
+        cell.fill = HEADER_FILL
+        cell.font = Font(name="Times New Roman", size=11, bold=True)
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        cell.border = THIN_BORDER
+
+    for data_row in ws.iter_rows(min_row=2):
+        for cell in data_row:
+            cell.font = Font(name="Times New Roman", size=11)
+            cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+            cell.border = THIN_BORDER
+
+    for column, field in enumerate(CASE_HISTORY_EXPORT_FIELDS, start=1):
+        header = CASE_HISTORY_EXPORT_HEADERS[field]
+        ws.column_dimensions[get_column_letter(column)].width = min(max(len(header) + 2, 12), 35)
+
+    ws.freeze_panes = "A2"
+    ws.auto_filter.ref = ws.dimensions
+    ws.sheet_view.showGridLines = False
+
+    metadata = wb.create_sheet("Metadata")
+    metadata.append(["StopeForge Export Version", CASE_HISTORY_EXPORT_VERSION])
+    metadata.append(["Content Type", "Case Histories"])
+    metadata.append(["Data Sheet", ws.title])
+    metadata.column_dimensions["A"].width = 28
+    metadata.column_dimensions["B"].width = 24
+
+    wb.save(output_path)
 
 
 def export_project_overview_to_excel(

@@ -16,6 +16,7 @@ from db.case_repository import (
 
 
 from core.export_excel import (
+    export_case_histories_to_excel,
     build_export_completion_message,
     export_project_overview_to_excel,
     open_exported_file,
@@ -576,27 +577,8 @@ class CaseHistoriesTab(ttk.Frame):
         if not output_path:
             return
 
-        export_rows = []
-
-        for row in rows_to_export:
-            export_rows.append(
-                {
-                    "project": row.get("project", ""),
-                    "domain": row.get("domain", ""),
-                    "stope_id": row.get("stope_id", ""),
-                    "depth": row.get("depth_m", ""),
-                    "height": row.get("height_m", ""),
-                    "avg_dip": row.get("avg_dip_deg", ""),
-                    "width": row.get("width_m", ""),
-                    "span": row.get("span_m", ""),
-                    "limiting_surface": row.get("surface", ""),
-                    "final_state": row.get("observed_state", ""),
-                    "comment": row.get("comment", ""),
-                }
-            )
-
         try:
-            export_project_overview_to_excel(export_rows, output_path)
+            export_case_histories_to_excel(rows_to_export, output_path)
 
             opened, open_error = open_exported_file(output_path)
             message = build_export_completion_message(

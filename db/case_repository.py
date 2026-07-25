@@ -33,6 +33,10 @@ CASE_FIELDS = [
     "comment",
 ]
 
+# Database-managed audit fields are not editable Case History values, but a
+# versioned Excel backup may restore them verbatim.
+CASE_AUDIT_FIELDS = ["created_at", "updated_at"]
+
 
 
 def _normalize_row(row: dict[str, Any]) -> dict[str, Any]:
@@ -67,8 +71,13 @@ def create_case(row: dict[str, Any], db_path: str | Path = DEFAULT_PROJECT_DB_PA
 
     clean_row = _normalize_row(row)
 
-    columns = ", ".join(CASE_FIELDS)
-    placeholders = ", ".join(["?"] * len(CASE_FIELDS))
+    insert_fields = list(CASE_FIELDS)
+    for field in CASE_AUDIT_FIELDS:
+        if row.get(field) not in (None, ""):
+            insert_fields.append(field)
+
+    columns = ", ".join(insert_fields)
+    placeholders = ", ".join(["?"] * len(insert_fields))
 
     with get_connection(db_path) as connection:
         cursor = connection.execute(
@@ -76,7 +85,7 @@ def create_case(row: dict[str, Any], db_path: str | Path = DEFAULT_PROJECT_DB_PA
             INSERT INTO case_histories ({columns})
             VALUES ({placeholders});
             """,
-            [clean_row[field] for field in CASE_FIELDS],
+            [clean_row[field] if field in CASE_FIELDS else row[field] for field in insert_fields],
         )
         connection.commit()
         return int(cursor.lastrowid)
