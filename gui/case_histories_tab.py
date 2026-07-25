@@ -16,6 +16,7 @@ from db.case_repository import (
 
 
 from core.export_excel import (
+    export_case_histories_to_excel,
     build_export_completion_message,
     export_project_overview_to_excel,
     open_exported_file,
@@ -66,7 +67,7 @@ def _calculate_shape_factor_hr(surface_type: SurfaceType, stope) -> float:
 
 
 class CaseHistoriesTab(ttk.Frame):
-    def __init__(self, parent):
+    def __init__(self, parent, on_cases_changed=None):
         super().__init__(parent)
 
         self.database_path = Path(DEFAULT_PROJECT_DB_PATH)
@@ -74,6 +75,7 @@ class CaseHistoriesTab(ttk.Frame):
         self.rows: list[dict] = []
         self.filtered_rows: list[dict] = []
         self.selected_item_id = None
+        self.on_cases_changed = on_cases_changed
 
         self.project_filter_var = tk.StringVar(value=ALL_VALUE)
         self.domain_filter_var = tk.StringVar(value=ALL_VALUE)
@@ -365,6 +367,7 @@ class CaseHistoriesTab(ttk.Frame):
 
             create_cases(new_rows, self.database_path)
             self.load_from_database()
+            self._notify_cases_changed()
 
             messagebox.showinfo(
                 "Saved",
@@ -395,6 +398,25 @@ class CaseHistoriesTab(ttk.Frame):
             filtered.append(row)
 
         return filtered
+
+    def get_all_rows(self) -> list[dict]:
+        """Return all cases; graph filters must not inherit Case Histories filters."""
+        return list(self.rows)
+
+    def _notify_cases_changed(self, reset_context: bool = False):
+        if self.on_cases_changed is not None:
+            self.on_cases_changed(reset_context)
+
+    def clear_filters(self):
+        self.project_filter_var.set(ALL_VALUE)
+        self.domain_filter_var.set(ALL_VALUE)
+        self.surface_filter_var.set(ALL_VALUE)
+        self.observed_filter_var.set(ALL_VALUE)
+        self.tree.selection_remove(self.tree.selection())
+        self.selected_item_id = None
+        self.observed_state_var.set("Unknown")
+        self.comment_var.set("")
+        self.refresh_table()
 
 
     def refresh_table(self, rows: list[dict] | None = None):
@@ -490,6 +512,7 @@ class CaseHistoriesTab(ttk.Frame):
                 
 
         self.load_from_database()
+        self._notify_cases_changed()
 
     def delete_selected(self):
         selection = self.tree.selection()
@@ -522,6 +545,7 @@ class CaseHistoriesTab(ttk.Frame):
                 delete_case(int(case_id), self.database_path)
 
         self.load_from_database()
+        self._notify_cases_changed()
 
 
     def load_from_database(self):
@@ -560,7 +584,25 @@ class CaseHistoriesTab(ttk.Frame):
 
 
     def export_to_excel(self):
-        rows_to_export = self.get_filtered_rows()
+        filtered_rows = self.get_filtered_rows()
+
+        if len(filtered_rows) == len(self.rows):
+            rows_to_export = self.rows
+            export_subject = f"Full Case History backup ({len(rows_to_export)} rows)"
+        else:
+            export_all = messagebox.askyesnocancel(
+                "Export Case Histories",
+                f"Total records: {len(self.rows)}\n"
+                f"Currently shown: {len(filtered_rows)}\n\n"
+                "Yes — export ALL records (recommended backup)\n"
+                "No — export only currently shown records\n"
+                "Cancel — do not export",
+            )
+            if export_all is None:
+                return
+            rows_to_export = self.rows if export_all else filtered_rows
+            mode = "Full Case History backup" if export_all else "Filtered Case Histories"
+            export_subject = f"{mode} ({len(rows_to_export)} rows)"
 
         if not rows_to_export:
             messagebox.showinfo("No data", "There are no case histories to export.")
@@ -576,31 +618,12 @@ class CaseHistoriesTab(ttk.Frame):
         if not output_path:
             return
 
-        export_rows = []
-
-        for row in rows_to_export:
-            export_rows.append(
-                {
-                    "project": row.get("project", ""),
-                    "domain": row.get("domain", ""),
-                    "stope_id": row.get("stope_id", ""),
-                    "depth": row.get("depth_m", ""),
-                    "height": row.get("height_m", ""),
-                    "avg_dip": row.get("avg_dip_deg", ""),
-                    "width": row.get("width_m", ""),
-                    "span": row.get("span_m", ""),
-                    "limiting_surface": row.get("surface", ""),
-                    "final_state": row.get("observed_state", ""),
-                    "comment": row.get("comment", ""),
-                }
-            )
-
         try:
-            export_project_overview_to_excel(export_rows, output_path)
+            export_case_histories_to_excel(rows_to_export, output_path)
 
             opened, open_error = open_exported_file(output_path)
             message = build_export_completion_message(
-                "Filtered case histories",
+                export_subject,
                 output_path,
                 opened,
                 open_error,
@@ -641,6 +664,7 @@ class CaseHistoriesTab(ttk.Frame):
 
             create_cases(imported_rows, self.database_path)
             self.load_from_database()
+            self._notify_cases_changed(reset_context=True)
 
 
             messagebox.showinfo(
@@ -663,6 +687,7 @@ class CaseHistoriesTab(ttk.Frame):
 
         delete_all_cases(self.database_path)
         self.load_from_database()
+        self._notify_cases_changed()
 
         messagebox.showinfo(
             "Cases deleted",

@@ -478,6 +478,17 @@ class StabilityGraphTab(ttk.Frame):
         self.observed_filter_var.set(ALL_VALUE)
         self.refresh_graph()
 
+    def clear_filters(self):
+        """Clear Project Tree context and every graph-specific case filter."""
+        self.project_filter_var.set(ALL_VALUE)
+        self.domain_filter_var.set(ALL_VALUE)
+        self.surface_filter_var.set(ALL_VALUE)
+        self.observed_filter_var.set(ALL_VALUE)
+        self.saved_boundary_var.set("")
+        self.saved_boundaries = []
+        self.refresh_filter_lists()
+        self.refresh_graph(load_active_boundary=False)
+
     def apply_manual_boundary(self):
         slope = _safe_float(self.boundary_slope_var.get())
         intercept = _safe_float(self.boundary_intercept_var.get())

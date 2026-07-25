@@ -49,16 +49,17 @@ def enable_mousewheel_scrolling(canvas: tk.Canvas, scrollable_frame: ttk.Frame |
     """Enable safe mouse-wheel scrolling for a canvas/inner-frame pair.
 
     The canvas scrollregion follows the inner frame, and the inner frame width
-    follows the visible canvas width. Wheel events are bound with ``bind_all``
-    only while the pointer is over the scrollable area, then unbound on leave.
-    Windows/macOS ``<MouseWheel>`` and Linux ``<Button-4>/<Button-5>`` events are
-    supported.
+    follows the visible canvas width. Wheel events are bound to the containing
+    window and handled only while the pointer is over the canvas or one of the
+    inner frame's descendants. Windows/macOS ``<MouseWheel>`` and Linux
+    ``<Button-4>/<Button-5>`` events are supported.
 
     Returns the canvas window item id for callers that need it.
     """
 
     window_id = canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
-    state: dict[str, bool | dict[str, str]] = {"active": False, "bindings": {}}
+    state: dict[str, dict[str, str]] = {"bindings": {}}
+    toplevel = canvas.winfo_toplevel()
 
     def update_scrollregion(_event: tk.Event[Any] | None = None) -> None:
         canvas.configure(scrollregion=canvas.bbox("all"))
@@ -88,7 +89,7 @@ def enable_mousewheel_scrolling(canvas: tk.Canvas, scrollable_frame: ttk.Frame |
         if target is not None and _widget_has_native_vertical_scroll(target):
             return None
 
-        if not _event_inside_widget(event, canvas):
+        if target is None or not _is_canvas_content(target):
             return None
 
         units = scroll_units_from_event(event)
@@ -97,37 +98,29 @@ def enable_mousewheel_scrolling(canvas: tk.Canvas, scrollable_frame: ttk.Frame |
             return "break"
         return None
 
-    def bind_wheel(_event: tk.Event[Any] | None = None) -> None:
-        if state["active"]:
-            return
-        state["active"] = True
-        bindings = state["bindings"]
-        assert isinstance(bindings, dict)
-        bindings["<MouseWheel>"] = canvas.bind_all("<MouseWheel>", on_mousewheel, add="+")
-        bindings["<Button-4>"] = canvas.bind_all("<Button-4>", on_mousewheel, add="+")
-        bindings["<Button-5>"] = canvas.bind_all("<Button-5>", on_mousewheel, add="+")
+    def _is_canvas_content(widget: tk.Widget) -> bool:
+        current: tk.Widget | None = widget
+        while current is not None:
+            if current in (canvas, scrollable_frame):
+                return True
+            current = getattr(current, "master", None)
+        return False
 
-    def unbind_wheel(event: tk.Event[Any] | None = None) -> None:
-        if not state["active"]:
-            return
-        if event is not None and _event_inside_widget(event, canvas):
-            return
-        state["active"] = False
+    def unbind_wheel(_event: tk.Event[Any] | None = None) -> None:
         bindings = state["bindings"]
-        assert isinstance(bindings, dict)
         for sequence, func_id in list(bindings.items()):
             try:
-                canvas._unbind(("bind", "all"), sequence, func_id)
+                toplevel.unbind(sequence, func_id)
             except tk.TclError:
                 pass
             bindings.pop(sequence, None)
 
     scrollable_frame.bind("<Configure>", update_scrollregion, add="+")
     canvas.bind("<Configure>", update_inner_width, add="+")
-    canvas.bind("<Enter>", bind_wheel, add="+")
-    scrollable_frame.bind("<Enter>", bind_wheel, add="+")
-    canvas.bind("<Leave>", unbind_wheel, add="+")
-
+    bindings = state["bindings"]
+    bindings["<MouseWheel>"] = toplevel.bind("<MouseWheel>", on_mousewheel, add="+")
+    bindings["<Button-4>"] = toplevel.bind("<Button-4>", on_mousewheel, add="+")
+    bindings["<Button-5>"] = toplevel.bind("<Button-5>", on_mousewheel, add="+")
     canvas.bind("<Destroy>", unbind_wheel, add="+")
     canvas.after_idle(update_scrollregion)
 

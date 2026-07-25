@@ -52,6 +52,7 @@ class StopeForgeApp(tk.Tk):
 
 
         self._build_ui()
+        self.bind_all("<Escape>", self.clear_workspace_context, add="+")
 
     def _build_ui(self):
         paned = ttk.PanedWindow(self, orient="horizontal")
@@ -112,7 +113,10 @@ class StopeForgeApp(tk.Tk):
         self.notebook.bind("<<NotebookTabChanged>>", self.on_tab_changed)
 
         self.project_overview_tab = ProjectOverviewTab(self.notebook)
-        self.case_histories_tab = CaseHistoriesTab(self.notebook)
+        self.case_histories_tab = CaseHistoriesTab(
+            self.notebook,
+            on_cases_changed=self.on_case_histories_changed,
+        )
 
         self.calculation_tab = CalculationTab(
             self.notebook,
@@ -122,7 +126,7 @@ class StopeForgeApp(tk.Tk):
 
         self.graph_tab = StabilityGraphTab(
             self.notebook,
-            get_case_rows_callback=self.case_histories_tab.get_filtered_rows,
+            get_case_rows_callback=self.case_histories_tab.get_all_rows,
         )
 
         self.notebook.add(self.calculation_tab, text="Calculation")
@@ -223,6 +227,45 @@ class StopeForgeApp(tk.Tk):
 
         finally:
             self.is_restoring_tree_selection = False
+
+        if active_tab == "Stability Graph" and hasattr(self, "graph_tab"):
+            self.graph_tab.refresh_filter_lists()
+            self.graph_tab.refresh_graph(load_active_boundary=False)
+
+    def clear_workspace_context(self, _event=None):
+        """Clear Project Tree context and show all rows/points on the active tab."""
+        self.project_tree_panel.clear_selection()
+        empty_context = {"project": "", "domain": "", "surface": ""}
+        active_tab = self.get_active_tab_name()
+        if active_tab:
+            self.tab_contexts[active_tab] = dict(empty_context)
+        self.current_context = dict(empty_context)
+        self.update_context_label(empty_context)
+
+        if active_tab == "Case Histories":
+            self.case_histories_tab.clear_filters()
+        elif active_tab == "Stability Graph":
+            self.graph_tab.clear_filters()
+        elif active_tab == "Calculation Log":
+            self.project_overview_tab.reset_filters()
+        elif active_tab == "Calculation":
+            # Do not erase engineering inputs from an unfinished calculation.
+            self.calculation_tab.set_context(empty_context)
+        return "break"
+
+    def on_case_histories_changed(self, reset_context: bool = False):
+        """Keep graph data synchronized without requiring an application restart."""
+        if reset_context:
+            self.clear_workspace_context()
+            empty_context = {"project": "", "domain": "", "surface": ""}
+            self.tab_contexts["Case Histories"] = dict(empty_context)
+            self.tab_contexts["Stability Graph"] = dict(empty_context)
+            self.case_histories_tab.clear_filters()
+            if hasattr(self, "graph_tab"):
+                self.graph_tab.clear_filters()
+        if hasattr(self, "graph_tab") and not reset_context:
+            self.graph_tab.refresh_filter_lists()
+            self.graph_tab.refresh_graph(load_active_boundary=False)
 
     def update_project_tree_visibility_for_tab(self, active_tab: str):
         if not hasattr(self, "project_tree_panel"):

@@ -109,7 +109,7 @@ def add_image(parent, image_store: list, relative_path: str, caption: str):
 def render_help_ru(parent, image_store: list):
     add_heading(parent, "StopeForge — справка пользователя")
 
-    quick = CollapsibleSection(parent, "Быстрый рабочий процесс", expanded=True)
+    quick = CollapsibleSection(parent, "Быстрый рабочий процесс", expanded=False)
     quick.pack(fill="x")
 
     add_paragraph(
@@ -163,10 +163,10 @@ def render_help_ru(parent, image_store: list):
         "границы устойчивости."
     )
 
-    method = CollapsibleSection(parent, "Методика Mathews/Potvin Stability Graph", expanded=True)
+    method = CollapsibleSection(parent, "Методика Mathews/Potvin Stability Graph", expanded=False)
     method.pack(fill="x")
 
-    overview = CollapsibleSection(method.body, "Общая идея метода", expanded=True)
+    overview = CollapsibleSection(method.body, "Общая идея метода", expanded=False)
     overview.pack(fill="x")
 
     add_paragraph(
@@ -587,7 +587,7 @@ def render_help_ru(parent, image_store: list):
 
 
 
-    local = CollapsibleSection(parent, "Локальные кривые и адаптация под месторождение", expanded=True)
+    local = CollapsibleSection(parent, "Локальные кривые и адаптация под месторождение", expanded=False)
     local.pack(fill="x")
 
     add_paragraph(
@@ -661,7 +661,7 @@ def render_help_ru(parent, image_store: list):
 def render_help_en(parent, image_store: list):
     add_heading(parent, "StopeForge — User Guide")
 
-    quick = CollapsibleSection(parent, "Quick workflow", expanded=True)
+    quick = CollapsibleSection(parent, "Quick workflow", expanded=False)
     quick.pack(fill="x")
 
     add_paragraph(
@@ -714,10 +714,10 @@ def render_help_en(parent, image_store: list):
         "stability boundaries to be reviewed or calibrated."
     )
 
-    method = CollapsibleSection(parent, "Mathews/Potvin Stability Graph Method", expanded=True)
+    method = CollapsibleSection(parent, "Mathews/Potvin Stability Graph Method", expanded=False)
     method.pack(fill="x")
 
-    overview = CollapsibleSection(method.body, "Method overview", expanded=True)
+    overview = CollapsibleSection(method.body, "Method overview", expanded=False)
     overview.pack(fill="x")
 
     add_paragraph(
@@ -1131,7 +1131,7 @@ def render_help_en(parent, image_store: list):
         "Figure - discrete shear structures"
     )
 
-    local = CollapsibleSection(parent, "Local curves and site-specific calibration", expanded=True)
+    local = CollapsibleSection(parent, "Local curves and site-specific calibration", expanded=False)
     local.pack(fill="x")
 
     add_paragraph(
