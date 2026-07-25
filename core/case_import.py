@@ -2,7 +2,11 @@ from pathlib import Path
 
 from openpyxl import load_workbook
 
-from db.case_repository import CASE_FIELDS
+from db.case_repository import CASE_AUDIT_FIELDS, CASE_FIELDS
+
+
+SUPPORTED_EXPORT_VERSIONS = {2}
+FULL_EXPORT_SHEET = "Case Histories"
 
 
 HEADER_ALIASES = {
@@ -57,6 +61,7 @@ HEADER_ALIASES = {
         "avg dip",
         "average dip",
         "average dip, °",
+        "average dip, deg",
         "average dip deg",
         "средний угол",
         "средний угол падения",
@@ -139,6 +144,7 @@ HEADER_ALIASES = {
     "stable_hr_limit_m": [
         "stable hr",
         "stable hr limit",
+        "stable hr limit, m",
         "hr stable",
         "устойчивый hr",
     ],
@@ -156,6 +162,7 @@ HEADER_ALIASES = {
         "observed state",
         "actual state",
         "fact state",
+        "fact",
         "факт",
         "фактическое состояние",
         "устойчивость",
@@ -169,6 +176,14 @@ HEADER_ALIASES = {
         "комментарий",
         "примечание",
     ],
+    "calculation_mode": ["calculation mode", "calculation_mode"],
+    "standard_state": ["standard state", "standard_state"],
+    "local_state": ["local state", "local_state"],
+    "local_boundary_name": ["local boundary name", "local boundary", "local_boundary_name"],
+    "local_boundary_n": ["local boundary n", "boundary n", "local_boundary_n"],
+    "actual_hr_m": ["actual hr", "actual hr, m", "actual_hr_m"],
+    "created_at": ["created at", "created_at"],
+    "updated_at": ["updated at", "updated_at"],
 }
 
 
@@ -291,10 +306,77 @@ def _find_header_row(ws, max_rows: int = 20) -> tuple[int, dict]:
     )
 
 
+def _export_version(wb) -> int | None:
+    if "Metadata" not in wb.sheetnames:
+        return None
+
+    ws = wb["Metadata"]
+    for row in ws.iter_rows(min_row=1, max_row=min(ws.max_row, 20), values_only=True):
+        if row and _normalize_text(row[0]) == "stopeforge export version":
+            try:
+                return int(row[1])
+            except (IndexError, TypeError, ValueError) as error:
+                raise ValueError("Invalid StopeForge Export Version in Metadata sheet.") from error
+    return None
+
+
+def _import_full_export(wb, version: int, sheet_name: str | None) -> list[dict]:
+    if version not in SUPPORTED_EXPORT_VERSIONS:
+        raise ValueError(
+            f"Unsupported StopeForge Export Version: {version}. "
+            f"Supported versions: {sorted(SUPPORTED_EXPORT_VERSIONS)}."
+        )
+
+    selected_sheet = sheet_name or FULL_EXPORT_SHEET
+    if selected_sheet not in wb.sheetnames:
+        raise ValueError(f"Data sheet '{selected_sheet}' was not found in workbook.")
+    ws = wb[selected_sheet]
+    header_map = _build_header_map([cell.value for cell in ws[1]])
+
+    required = {"project", "domain", "stope_id", "surface"}
+    missing = sorted(required - header_map.keys())
+    if missing:
+        raise ValueError("Full export is missing required columns: " + ", ".join(missing))
+
+    defaults = {
+        "project": "", "domain": "", "stope_id": "", "surface": "",
+        "predicted_state": "", "calculation_mode": "Standard",
+        "standard_state": "", "local_state": "", "local_boundary_name": "",
+        "observed_state": "Unknown", "comment": "",
+    }
+    number_fields = {
+        "depth_m", "height_m", "avg_dip_deg", "width_m", "span_m", "q_prime",
+        "a", "b", "c", "n", "shape_factor_hr_m", "stable_hr_limit_m",
+        "local_boundary_n", "actual_hr_m",
+    }
+    imported_rows = []
+    for values in ws.iter_rows(min_row=2, values_only=True):
+        if not any(value is not None for value in values):
+            continue
+        case_row = {}
+        for field in [*CASE_FIELDS, *CASE_AUDIT_FIELDS]:
+            column = header_map.get(field)
+            value = values[column] if column is not None and column < len(values) else None
+            if field in number_fields:
+                case_row[field] = None if value in (None, "") else _normalize_number(value)
+            elif value is None:
+                case_row[field] = defaults.get(field, "")
+            else:
+                # Full exports already contain canonical application values.  Do not
+                # rewrite them: comments and other user text must round-trip exactly.
+                case_row[field] = str(value)
+        imported_rows.append(case_row)
+    return imported_rows
+
+
 def import_case_histories_from_excel(path: str | Path, sheet_name: str | None = None) -> list[dict]:
     path = Path(path)
 
     wb = load_workbook(path, data_only=True)
+
+    version = _export_version(wb)
+    if version is not None:
+        return _import_full_export(wb, version, sheet_name)
 
     if sheet_name:
         if sheet_name not in wb.sheetnames:
